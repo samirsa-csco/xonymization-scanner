@@ -337,6 +337,49 @@ Total Events: {len(self.results)}
         
         return transactions
     
+    def find_shared_values(self, transaction_logs: List[Dict[str, Any]]) -> Dict[str, Dict[str, List[str]]]:
+        """
+        Find which fields share the same values within a transaction.
+        
+        Args:
+            transaction_logs: List of log entries for a transaction
+            
+        Returns:
+            Dictionary mapping field names to their values, and for each value,
+            a list of other fields that share that value
+            Format: {field_name: {value: [other_fields_with_same_value]}}
+        """
+        # First, collect all field-value pairs
+        value_to_fields = {}  # value -> list of fields that have this value
+        field_values = {}  # field -> list of its values
+        
+        for log in transaction_logs:
+            flattened = self._flatten_dict(log)
+            for field, value in flattened.items():
+                value_str = str(value)
+                
+                # Track which fields have which values
+                if value_str not in value_to_fields:
+                    value_to_fields[value_str] = set()
+                value_to_fields[value_str].add(field)
+                
+                # Track values for each field
+                if field not in field_values:
+                    field_values[field] = set()
+                field_values[field].add(value_str)
+        
+        # Build the result: for each field's single value, find other fields with same value
+        result = {}
+        for field, values in field_values.items():
+            result[field] = {}
+            for value in values:
+                # Find other fields that share this value
+                other_fields = [f for f in value_to_fields[value] if f != field]
+                if other_fields:
+                    result[field][value] = sorted(other_fields)
+        
+        return result
+    
     def format_transaction_group(self, transaction_id: str, logs: List[Dict[str, Any]]) -> str:
         """
         Format a transaction group showing all unique fields across logs.

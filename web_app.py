@@ -110,9 +110,13 @@ def search():
                     'unique_count': len(values)
                 })
             
+            # Find shared values for this transaction
+            shared_values = scanner.find_shared_values(logs)
+            
             transaction_details[str(transaction_id)] = {
                 'logs': logs,
-                'fields': fields_list
+                'fields': fields_list,
+                'shared_values': shared_values
             }
         
         return jsonify({

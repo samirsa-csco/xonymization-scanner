@@ -244,15 +244,6 @@
             color: #6c757d;
         }
 
-        .value-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            background: #e9ecef;
-            border-radius: 12px;
-            margin: 2px;
-            font-size: 0.9em;
-        }
-
         .multi-value {
             background: #ffc107;
             color: #000;
@@ -293,15 +284,120 @@
             border-left: 4px solid #f5c6cb;
         }
 
-        .details-header {
+        .value-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #e9ecef;
+            border-radius: 12px;
+            margin: 2px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .value-badge:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        .value-badge.clickable {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+
+        .value-badge.clickable:hover {
+            background: #28a745;
+            color: white;
+        }
+
+        .popup-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .popup-overlay.active {
+            display: flex;
+        }
+
+        .popup-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: popupSlide 0.3s ease-out;
+        }
+
+        @keyframes popupSlide {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 20px;
             padding-bottom: 15px;
             border-bottom: 2px solid #e9ecef;
         }
 
-        .details-header h2 {
+        .popup-header h3 {
             color: #495057;
+            margin: 0;
+        }
+
+        .popup-close {
+            background: none;
+            border: none;
             font-size: 1.5em;
+            cursor: pointer;
+            color: #6c757d;
+            transition: color 0.2s;
+        }
+
+        .popup-close:hover {
+            color: #000;
+        }
+
+        .popup-value {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+        }
+
+        .shared-fields-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .shared-field-item {
+            padding: 12px;
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
         }
     </style>
 </head>
@@ -364,6 +460,18 @@
                     <p>Click on a transaction from the list to view details</p>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Popup for shared values -->
+    <div class="popup-overlay" id="popupOverlay" onclick="closePopup(event)">
+        <div class="popup-content" onclick="event.stopPropagation()">
+            <div class="popup-header">
+                <h3>Fields Sharing This Value</h3>
+                <button class="popup-close" onclick="closePopup()">&times;</button>
+            </div>
+            <div class="popup-value" id="popupValue"></div>
+            <ul class="shared-fields-list" id="sharedFieldsList"></ul>
         </div>
     </div>
 
@@ -481,13 +589,10 @@
 
             // Display details
             const details = currentData.details[transactionId];
+            const sharedValues = details.shared_values || {};
             const detailsPanel = document.getElementById('detailsPanel');
 
             let html = `
-                <div class="details-header">
-                    <h2>Field Details</h2>
-                </div>
-
                 <div class="table-container">
                     <table>
                         <thead>
@@ -502,9 +607,18 @@
 
             details.fields.forEach(field => {
                 const isMultiValue = field.unique_count > 1;
-                const valuesHtml = field.values.map(v => 
-                    `<span class="value-badge ${isMultiValue ? 'multi-value' : ''}">${escapeHtml(String(v))}</span>`
-                ).join(' ');
+                const fieldSharedValues = sharedValues[field.field] || {};
+                
+                const valuesHtml = field.values.map(v => {
+                    const valueStr = String(v);
+                    const hasSharedFields = fieldSharedValues[valueStr] && fieldSharedValues[valueStr].length > 0;
+                    const clickableClass = hasSharedFields && !isMultiValue ? 'clickable' : '';
+                    const multiClass = isMultiValue ? 'multi-value' : '';
+                    const onclick = hasSharedFields && !isMultiValue ? 
+                        `onclick="showSharedFields('${escapeHtml(field.field)}', '${escapeHtml(valueStr)}', ${JSON.stringify(fieldSharedValues[valueStr]).replace(/"/g, '&quot;')})"` : '';
+                    
+                    return `<span class="value-badge ${clickableClass} ${multiClass}" ${onclick}>${escapeHtml(valueStr)}</span>`;
+                }).join(' ');
 
                 html += `
                     <tr>
@@ -522,6 +636,26 @@
             `;
 
             detailsPanel.innerHTML = html;
+        }
+
+        function showSharedFields(fieldName, value, sharedFields) {
+            document.getElementById('popupValue').innerHTML = `
+                <strong>Value:</strong> ${escapeHtml(value)}<br>
+                <strong>From Field:</strong> ${escapeHtml(fieldName)}
+            `;
+            
+            const listHtml = sharedFields.map(field => 
+                `<li class="shared-field-item">${escapeHtml(field)}</li>`
+            ).join('');
+            
+            document.getElementById('sharedFieldsList').innerHTML = listHtml;
+            document.getElementById('popupOverlay').classList.add('active');
+        }
+
+        function closePopup(event) {
+            if (!event || event.target.id === 'popupOverlay') {
+                document.getElementById('popupOverlay').classList.remove('active');
+            }
         }
 
         function showError(message) {
