@@ -17,8 +17,8 @@ def main():
     # Connection arguments
     parser.add_argument(
         "--host",
-        required=True,
-        help="Splunk server hostname or IP address"
+        default="cisco-opendnsbu-sse.splunkcloud.com",
+        help="Splunk server hostname or IP address (default: cisco-opendnsbu-sse.splunkcloud.com)"
     )
     parser.add_argument(
         "--port",
@@ -32,7 +32,7 @@ def main():
     )
     parser.add_argument(
         "--password",
-        help="Splunk password for authentication"
+        help="Splunk password for authentication (use quotes if it contains special characters)"
     )
     parser.add_argument(
         "--token",

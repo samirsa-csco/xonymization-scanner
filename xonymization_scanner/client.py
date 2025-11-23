@@ -36,6 +36,7 @@ class SplunkClient:
         self.password = password
         self.token = token
         self.verify_ssl = verify_ssl
+        # Use HTTPS with management port for Splunk Cloud API
         self.base_url = f"https://{host}:{port}"
         self.session = requests.Session()
         
@@ -74,7 +75,7 @@ class SplunkClient:
         elif "search" not in query.lower():
             search_query = f"search {query}"
 
-        # Create search job
+        # Create search job against Splunk management API
         search_url = f"{self.base_url}/services/search/jobs"
         search_params = {
             "search": search_query,
@@ -204,5 +205,11 @@ class SplunkClient:
             )
             response.raise_for_status()
             return True
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
+            import sys
+            print(f"Connection test failed: {e}", file=sys.stderr)
+            print(f"URL attempted: {url}", file=sys.stderr)
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Response status: {e.response.status_code}", file=sys.stderr)
+                print(f"Response body: {e.response.text[:500]}", file=sys.stderr)
             return False
