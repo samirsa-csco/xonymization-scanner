@@ -149,14 +149,26 @@
 
         .transaction-id {
             font-weight: 600;
-            font-size: 1.1em;
-            margin-bottom: 5px;
+            font-size: 1em;
+            margin-bottom: 8px;
             word-break: break-all;
         }
 
-        .transaction-count {
-            font-size: 0.9em;
-            opacity: 0.7;
+        .transaction-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85em;
+            opacity: 0.8;
+        }
+
+        .transaction-stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .transaction-stat-icon {
+            font-size: 1.1em;
         }
 
         .details-panel {
@@ -281,52 +293,15 @@
             border-left: 4px solid #f5c6cb;
         }
 
-        .stats {
-            display: flex;
-            gap: 20px;
+        .details-header {
             margin-bottom: 20px;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
         }
 
-        .stat-item {
-            flex: 1;
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 2em;
-            font-weight: 700;
-            color: #667eea;
-        }
-
-        .stat-label {
-            font-size: 0.9em;
-            color: #6c757d;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-top: 5px;
-        }
-
-        .transaction-header {
-            margin-bottom: 30px;
-        }
-
-        .transaction-header h2 {
+        .details-header h2 {
             color: #495057;
-            margin-bottom: 10px;
-        }
-
-        .transaction-header .transaction-id-display {
-            font-family: 'Courier New', monospace;
-            font-size: 1.2em;
-            color: #667eea;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            word-break: break-all;
+            font-size: 1.5em;
         }
     </style>
 </head>
@@ -464,10 +439,20 @@
 
             let html = '';
             data.transactions.forEach(transaction => {
+                const fieldCount = currentData.details[transaction.id].fields.length;
                 html += `
                     <div class="transaction-item" onclick="selectTransaction('${transaction.id}', event)">
                         <div class="transaction-id">${transaction.id}</div>
-                        <div class="transaction-count">${transaction.log_count} log${transaction.log_count > 1 ? 's' : ''}</div>
+                        <div class="transaction-stats">
+                            <div class="transaction-stat">
+                                <span class="transaction-stat-icon">📄</span>
+                                <span>${transaction.log_count} log${transaction.log_count > 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="transaction-stat">
+                                <span class="transaction-stat-icon">🔑</span>
+                                <span>${fieldCount} field${fieldCount > 1 ? 's' : ''}</span>
+                            </div>
+                        </div>
                     </div>
                 `;
             });
@@ -499,20 +484,8 @@
             const detailsPanel = document.getElementById('detailsPanel');
 
             let html = `
-                <div class="transaction-header">
-                    <h2>Transaction Details</h2>
-                    <div class="transaction-id-display">${transactionId}</div>
-                </div>
-
-                <div class="stats">
-                    <div class="stat-item">
-                        <div class="stat-value">${details.logs.length}</div>
-                        <div class="stat-label">Total Logs</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${details.fields.length}</div>
-                        <div class="stat-label">Unique Fields</div>
-                    </div>
+                <div class="details-header">
+                    <h2>Field Details</h2>
                 </div>
 
                 <div class="table-container">
