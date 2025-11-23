@@ -1,24 +1,33 @@
 """High-level scanner combining client and parser functionality."""
 
 from typing import Any, Dict, List, Optional, Callable
+from collections import Counter
+import json
+import csv
+import io
 from .client import SplunkClient
 from .parser import LogParser
+from .raw_parsers import RawParserRegistry
 
 
 class LogScanner:
     """High-level interface for scanning and analyzing Splunk logs."""
 
-    def __init__(self, client: SplunkClient, parser: Optional[LogParser] = None):
+    def __init__(self, client: SplunkClient, parser: Optional[LogParser] = None, raw_format: str = "json"):
         """
         Initialize the log scanner.
 
         Args:
             client: Configured SplunkClient instance
             parser: LogParser instance (creates new one if not provided)
+            raw_format: Format of _raw field (json, plaintext, keyvalue)
         """
         self.client = client
         self.parser = parser or LogParser()
-        self.results: List[Dict[str, Any]] = []
+        self.raw_parser_registry = RawParserRegistry()
+        self.raw_format = raw_format
+        self.results: List[Any] = []
+        self.raw_results: List[Dict[str, Any]] = []  # Store original Splunk results
 
     def scan(
         self,
@@ -27,7 +36,8 @@ class LogScanner:
         earliest_time: str = "-24h",
         latest_time: str = "now",
         max_results: int = 1000,
-    ) -> List[Dict[str, Any]]:
+        parse_raw: bool = True,
+    ) -> List[Any]:
         """
         Execute a scan on Splunk logs.
 
@@ -37,24 +47,55 @@ class LogScanner:
             earliest_time: Earliest time for search
             latest_time: Latest time for search
             max_results: Maximum number of results
+            parse_raw: If True, parse _raw field and return only parsed content
 
         Returns:
-            List of log events
+            List of parsed _raw content (if parse_raw=True) or full log events
         """
-        self.results = self.client.search(
+        self.raw_results = self.client.search(
             query=query,
             index=index,
             earliest_time=earliest_time,
             latest_time=latest_time,
             max_results=max_results,
         )
+        
+        if parse_raw:
+            self.results = self._parse_raw_fields(self.raw_results)
+        else:
+            self.results = self.raw_results
+        
         return self.results
+    
+    def _parse_raw_fields(self, events: List[Dict[str, Any]]) -> List[Any]:
+        """
+        Parse _raw fields from events and return only the parsed content.
+        
+        Args:
+            events: List of Splunk events
+            
+        Returns:
+            List of parsed _raw content
+        """
+        parsed_results = []
+        for event in events:
+            if "_raw" in event:
+                parsed_raw = self.raw_parser_registry.parse(event["_raw"], self.raw_format)
+                if parsed_raw is not None:
+                    parsed_results.append(parsed_raw)
+                else:
+                    # If parsing fails, include the raw text
+                    parsed_results.append(event["_raw"])
+            else:
+                # If no _raw field, include the whole event
+                parsed_results.append(event)
+        return parsed_results
 
     def filter_results(
         self, field: str, value: Any, operator: str = "equals"
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Any]:
         """
-        Filter the current results.
+        Filter the current results (works on dict-like parsed content).
 
         Args:
             field: Field to filter on
@@ -62,9 +103,15 @@ class LogScanner:
             operator: Comparison operator
 
         Returns:
-            Filtered list of events
+            Filtered list of results
         """
-        self.results = self.parser.filter_events(self.results, field, value, operator)
+        filtered = []
+        for item in self.results:
+            if isinstance(item, dict):
+                # Use the parser's filter logic
+                temp_results = self.parser.filter_events([item], field, value, operator)
+                filtered.extend(temp_results)
+        self.results = filtered
         return self.results
 
     def extract_field_from_results(self, field: str) -> List[Optional[str]]:
@@ -81,7 +128,7 @@ class LogScanner:
 
     def aggregate_results(self, field: str) -> Dict[str, int]:
         """
-        Aggregate results by field value.
+        Aggregate results by field value (works on dict-like parsed content).
 
         Args:
             field: Field to aggregate by
@@ -89,7 +136,15 @@ class LogScanner:
         Returns:
             Dictionary mapping field values to counts
         """
-        return self.parser.aggregate_by_field(self.results, field)
+        if not self.results or not isinstance(self.results[0], dict):
+            return {}
+        
+        field_values = [
+            item.get(field) 
+            for item in self.results 
+            if isinstance(item, dict) and field in item
+        ]
+        return dict(Counter(field_values))
 
     def apply_pattern(
         self, pattern_name: str, field: str = "_raw"
@@ -143,39 +198,68 @@ class LogScanner:
         self.results = [processor(event) for event in self.results]
         return self.results
 
-    def export_results(self, format: str = "json") -> str:
+    def export_results(self, format: str = "json", aggregate_by: Optional[str] = None) -> str:
         """
         Export results in specified format.
 
         Args:
-            format: Export format (json, csv)
+            format: Export format (json, csv, summary)
+            aggregate_by: Optional field to aggregate by
 
         Returns:
             Formatted string of results
         """
+        # Handle aggregation
+        if aggregate_by:
+            aggregation = self.aggregate_results(aggregate_by)
+            if format == "summary":
+                output = f"""
+Summary:
+--------
+Total Events: {len(self.results)}
+
+Aggregation by '{aggregate_by}':
+"""
+                for key, count in Counter(aggregation).most_common(20):
+                    output += f"  {key}: {count}\n"
+                return output
+            else:
+                return json.dumps(aggregation, indent=2)
+        
+        # Regular export
         if format == "json":
-            import json
             return json.dumps(self.results, indent=2, default=str)
         elif format == "csv":
-            import csv
-            import io
-            
             if not self.results:
                 return ""
+            
+            # CSV only works with dict-like results
+            if not isinstance(self.results[0], dict):
+                raise ValueError("CSV export requires dict-like results")
             
             output = io.StringIO()
             
             # Get all unique fields
             fields = set()
-            for event in self.results:
-                fields.update(event.keys())
+            for item in self.results:
+                if isinstance(item, dict):
+                    fields.update(item.keys())
             
             fieldnames = sorted(list(fields))
             writer = csv.DictWriter(output, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(self.results)
+            for item in self.results:
+                if isinstance(item, dict):
+                    writer.writerow(item)
             
             return output.getvalue()
+        elif format == "summary":
+            output = f"""
+Summary:
+--------
+Total Events: {len(self.results)}
+"""
+            return output
         else:
             raise ValueError(f"Unsupported format: {format}")
 

@@ -4,9 +4,8 @@
 import argparse
 import sys
 import os
-import json
 from typing import Optional
-from xonymization_scanner import SplunkClient, LogScanner, RawParserRegistry
+from xonymization_scanner import SplunkClient, LogScanner
 
 
 def main():
@@ -159,8 +158,8 @@ def main():
                 print(f"  - {idx}")
             sys.exit(0)
         
-        # Initialize scanner
-        scanner = LogScanner(client)
+        # Initialize scanner with raw format
+        scanner = LogScanner(client, raw_format=args.raw_format)
         
         # Execute search
         print(f"Executing query: {args.query}", file=sys.stderr)
@@ -174,80 +173,26 @@ def main():
             earliest_time=args.earliest,
             latest_time=args.latest,
             max_results=args.max_results,
+            parse_raw=True,
         )
         
         print(f"Found {len(results)} events", file=sys.stderr)
         
-        # Parse _raw field and extract only parsed content
-        raw_parser_registry = RawParserRegistry()
-        parsed_raw_only = []
-        for event in results:
-            if "_raw" in event:
-                parsed_raw = raw_parser_registry.parse(event["_raw"], args.raw_format)
-                if parsed_raw is not None:
-                    parsed_raw_only.append(parsed_raw)
-                else:
-                    # If parsing fails, include the raw text
-                    parsed_raw_only.append(event["_raw"])
-            else:
-                # If no _raw field, include the whole event
-                parsed_raw_only.append(event)
-        
-        # Replace results with just the parsed _raw content
-        results = parsed_raw_only
-        
-        # Apply filters if specified (only works if parsed content is dict-like)
+        # Apply filters if specified
         if args.filter_field and args.filter_value:
             print(f"Filtering by {args.filter_field} {args.filter_operator} {args.filter_value}", file=sys.stderr)
-            filtered = []
-            for item in results:
-                if isinstance(item, dict):
-                    # Use the parser's filter logic
-                    temp_results = scanner.parser.filter_events([item], args.filter_field, args.filter_value, args.filter_operator)
-                    filtered.extend(temp_results)
-            results = filtered
-            print(f"After filtering: {len(results)} events", file=sys.stderr)
+            scanner.filter_results(
+                field=args.filter_field,
+                value=args.filter_value,
+                operator=args.filter_operator,
+            )
+            print(f"After filtering: {len(scanner.results)} events", file=sys.stderr)
         
-        # Generate output
-        if args.output_format == "summary":
-            output = f"""
-Summary:
---------
-Total Events: {len(results)}
-"""
-            if args.aggregate_by and results and isinstance(results[0], dict):
-                # Aggregate by field in parsed results
-                from collections import Counter
-                field_values = [item.get(args.aggregate_by) for item in results if isinstance(item, dict) and args.aggregate_by in item]
-                aggregation = Counter(field_values)
-                output += f"\nAggregation by '{args.aggregate_by}':\n"
-                for key, count in aggregation.most_common(20):
-                    output += f"  {key}: {count}\n"
-        elif args.aggregate_by and results and isinstance(results[0], dict):
-            from collections import Counter
-            field_values = [item.get(args.aggregate_by) for item in results if isinstance(item, dict) and args.aggregate_by in item]
-            aggregation = Counter(field_values)
-            output = json.dumps(dict(aggregation), indent=2)
-        elif args.output_format == "csv" and results and isinstance(results[0], dict):
-            # CSV output for dict results
-            import csv
-            import io
-            output_io = io.StringIO()
-            if results:
-                fields = set()
-                for item in results:
-                    if isinstance(item, dict):
-                        fields.update(item.keys())
-                fieldnames = sorted(list(fields))
-                writer = csv.DictWriter(output_io, fieldnames=fieldnames)
-                writer.writeheader()
-                for item in results:
-                    if isinstance(item, dict):
-                        writer.writerow(item)
-            output = output_io.getvalue()
-        else:
-            # Default JSON output of parsed _raw content
-            output = json.dumps(results, indent=2, default=str)
+        # Generate output using scanner's export method
+        output = scanner.export_results(
+            format=args.output_format,
+            aggregate_by=args.aggregate_by
+        )
         
         # Write output
         if args.output_file:
