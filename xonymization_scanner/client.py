@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 import requests
 from requests.auth import HTTPBasicAuth
+import urllib3
 
 
 class SplunkClient:
@@ -39,6 +40,10 @@ class SplunkClient:
         # Use HTTPS with management port for Splunk Cloud API
         self.base_url = f"https://{host}:{port}"
         self.session = requests.Session()
+        
+        # Disable SSL warnings if SSL verification is disabled
+        if not verify_ssl:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
         if token:
             self.session.headers.update({"Authorization": f"Bearer {token}"})

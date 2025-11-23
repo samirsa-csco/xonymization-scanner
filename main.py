@@ -41,7 +41,7 @@ def main():
     parser.add_argument(
         "--no-verify-ssl",
         action="store_true",
-        help="Disable SSL certificate verification"
+        help="Disable SSL certificate verification (not recommended for production)"
     )
     
     # Search arguments
