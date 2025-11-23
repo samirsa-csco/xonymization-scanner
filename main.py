@@ -113,6 +113,18 @@ def main():
         help="Format of the _raw field (default: json)"
     )
     
+    # Transaction grouping
+    parser.add_argument(
+        "--transaction-id",
+        default="serviceChainID",
+        help="Field name to group logs by transaction (default: serviceChainID)"
+    )
+    parser.add_argument(
+        "--group-by-transaction",
+        action="store_true",
+        help="Group and display logs by transaction ID"
+    )
+    
     # List indexes
     parser.add_argument(
         "--list-indexes",
@@ -188,11 +200,25 @@ def main():
             )
             print(f"After filtering: {len(scanner.results)} events", file=sys.stderr)
         
-        # Generate output using scanner's export method
-        output = scanner.export_results(
-            format=args.output_format,
-            aggregate_by=args.aggregate_by
-        )
+        # Handle transaction grouping if requested
+        if args.group_by_transaction:
+            print(f"Grouping by transaction field: {args.transaction_id}", file=sys.stderr)
+            transactions = scanner.group_by_transaction(args.transaction_id)
+            print(f"Found {len(transactions)} unique transactions", file=sys.stderr)
+            
+            # Format output for each transaction
+            output_parts = []
+            for transaction_id, logs in transactions.items():
+                formatted = scanner.format_transaction_group(transaction_id, logs)
+                output_parts.append(formatted)
+            
+            output = "\n".join(output_parts)
+        else:
+            # Generate output using scanner's export method
+            output = scanner.export_results(
+                format=args.output_format,
+                aggregate_by=args.aggregate_by
+            )
         
         # Write output
         if args.output_file:

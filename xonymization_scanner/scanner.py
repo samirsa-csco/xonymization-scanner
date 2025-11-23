@@ -284,3 +284,106 @@ Total Events: {len(self.results)}
             Number of results
         """
         return len(self.results)
+    
+    def _flatten_dict(self, d: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
+        """
+        Flatten a nested dictionary with dot notation.
+        
+        Args:
+            d: Dictionary to flatten
+            parent_key: Parent key for recursion
+            sep: Separator for nested keys
+            
+        Returns:
+            Flattened dictionary
+        """
+        items = []
+        for k, v in d.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(self._flatten_dict(v, new_key, sep=sep).items())
+            elif isinstance(v, list):
+                # For lists, create indexed keys
+                for i, item in enumerate(v):
+                    if isinstance(item, dict):
+                        items.extend(self._flatten_dict(item, f"{new_key}[{i}]", sep=sep).items())
+                    else:
+                        items.append((f"{new_key}[{i}]", item))
+            else:
+                items.append((new_key, v))
+        return dict(items)
+    
+    def group_by_transaction(self, transaction_field: str) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Group results by transaction ID field.
+        
+        Args:
+            transaction_field: Name of the field to group by
+            
+        Returns:
+            Dictionary mapping transaction IDs to lists of log entries
+        """
+        transactions = {}
+        
+        for item in self.results:
+            if isinstance(item, dict):
+                # Get transaction ID from the item
+                transaction_id = item.get(transaction_field)
+                
+                if transaction_id is not None:
+                    if transaction_id not in transactions:
+                        transactions[transaction_id] = []
+                    transactions[transaction_id].append(item)
+        
+        return transactions
+    
+    def format_transaction_group(self, transaction_id: str, logs: List[Dict[str, Any]]) -> str:
+        """
+        Format a transaction group showing all unique fields across logs.
+        
+        Args:
+            transaction_id: The transaction ID
+            logs: List of log entries for this transaction
+            
+        Returns:
+            Formatted string representation
+        """
+        output = []
+        output.append(f"\n{'=' * 80}")
+        output.append(f"Transaction ID: {transaction_id}")
+        output.append(f"Number of logs: {len(logs)}")
+        output.append(f"{'=' * 80}\n")
+        
+        # Collect all unique fields across all logs in this transaction
+        all_fields = {}
+        
+        for i, log in enumerate(logs, 1):
+            output.append(f"Log #{i}:")
+            output.append("-" * 40)
+            
+            # Flatten the log to show nested fields with dot notation
+            flattened = self._flatten_dict(log)
+            
+            # Print all fields for this log
+            for key, value in sorted(flattened.items()):
+                output.append(f"  {key} = {value}")
+                
+                # Track unique fields
+                if key not in all_fields:
+                    all_fields[key] = set()
+                all_fields[key].add(str(value))
+            
+            output.append("")
+        
+        # Summary of unique fields
+        output.append(f"{'=' * 80}")
+        output.append(f"Summary - Unique fields across all logs in transaction {transaction_id}:")
+        output.append(f"{'=' * 80}")
+        for key in sorted(all_fields.keys()):
+            values = all_fields[key]
+            if len(values) == 1:
+                output.append(f"  {key} = {list(values)[0]}")
+            else:
+                output.append(f"  {key} = {len(values)} unique values: {list(values)[:3]}{'...' if len(values) > 3 else ''}")
+        
+        return "\n".join(output)
