@@ -238,6 +238,13 @@
             font-weight: 600;
             color: #495057;
             font-family: 'Courier New', monospace;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .field-name:hover {
+            color: #667eea;
+            text-decoration: underline;
         }
 
         .field-values {
@@ -399,6 +406,64 @@
             border-radius: 4px;
             font-family: 'Courier New', monospace;
         }
+
+        .log-message {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .log-message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .log-number {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .json-content {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .json-key {
+            color: #e06c75;
+        }
+
+        .json-string {
+            color: #98c379;
+        }
+
+        .json-number {
+            color: #d19a66;
+        }
+
+        .json-boolean {
+            color: #56b6c2;
+        }
+
+        .json-null {
+            color: #c678dd;
+        }
+
+        .popup-content.large {
+            max-width: 900px;
+            width: 90vw;
+        }
     </style>
 </head>
 <body>
@@ -465,13 +530,15 @@
 
     <!-- Popup for shared values -->
     <div class="popup-overlay" id="popupOverlay" onclick="closePopup(event)">
-        <div class="popup-content" onclick="event.stopPropagation()">
+        <div class="popup-content" id="popupContent" onclick="event.stopPropagation()">
             <div class="popup-header">
-                <h3>Fields Sharing This Value</h3>
+                <h3 id="popupTitle">Fields Sharing This Value</h3>
                 <button class="popup-close" onclick="closePopup()">&times;</button>
             </div>
-            <div class="popup-value" id="popupValue"></div>
-            <ul class="shared-fields-list" id="sharedFieldsList"></ul>
+            <div id="popupBody">
+                <div class="popup-value" id="popupValue"></div>
+                <ul class="shared-fields-list" id="sharedFieldsList"></ul>
+            </div>
         </div>
     </div>
 
@@ -622,7 +689,7 @@
 
                 html += `
                     <tr>
-                        <td class="field-name">${escapeHtml(field.field)}</td>
+                        <td class="field-name" onclick="showFieldLogs('${escapeHtml(field.field)}')">${escapeHtml(field.field)}</td>
                         <td class="field-values">${valuesHtml}</td>
                         <td style="text-align: center;">${field.unique_count}</td>
                     </tr>
@@ -639,22 +706,110 @@
         }
 
         function showSharedFields(fieldName, value, sharedFields) {
-            document.getElementById('popupValue').innerHTML = `
-                <strong>Value:</strong> ${escapeHtml(value)}<br>
-                <strong>From Field:</strong> ${escapeHtml(fieldName)}
+            const popupContent = document.getElementById('popupContent');
+            popupContent.classList.remove('large');
+            
+            document.getElementById('popupTitle').textContent = 'Fields Sharing This Value';
+            document.getElementById('popupBody').innerHTML = `
+                <div class="popup-value">
+                    <strong>Value:</strong> ${escapeHtml(value)}<br>
+                    <strong>From Field:</strong> ${escapeHtml(fieldName)}
+                </div>
+                <ul class="shared-fields-list">
+                    ${sharedFields.map(field => 
+                        `<li class="shared-field-item">${escapeHtml(field)}</li>`
+                    ).join('')}
+                </ul>
             `;
             
-            const listHtml = sharedFields.map(field => 
-                `<li class="shared-field-item">${escapeHtml(field)}</li>`
-            ).join('');
-            
-            document.getElementById('sharedFieldsList').innerHTML = listHtml;
             document.getElementById('popupOverlay').classList.add('active');
+        }
+
+        function showFieldLogs(fieldName) {
+            const details = currentData.details[selectedTransaction];
+            const logs = details.logs;
+            
+            // Find all logs that contain this field
+            const logsWithField = [];
+            logs.forEach((log, index) => {
+                // Check if field exists in flattened log
+                const flattened = flattenDict(log);
+                if (fieldName in flattened) {
+                    logsWithField.push({ index: index + 1, log: log });
+                }
+            });
+            
+            const popupContent = document.getElementById('popupContent');
+            popupContent.classList.add('large');
+            
+            document.getElementById('popupTitle').textContent = `Logs Containing Field: ${fieldName}`;
+            
+            let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithField.length} log${logsWithField.length > 1 ? 's' : ''}</p>`;
+            
+            logsWithField.forEach(item => {
+                bodyHtml += `
+                    <div class="log-message">
+                        <div class="log-message-header">
+                            <span class="log-number">Log #${item.index}</span>
+                        </div>
+                        <div class="json-content">${syntaxHighlightJson(item.log)}</div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('popupBody').innerHTML = bodyHtml;
+            document.getElementById('popupOverlay').classList.add('active');
+        }
+
+        function flattenDict(obj, parent = '', sep = '.') {
+            let items = {};
+            for (let k in obj) {
+                let newKey = parent ? `${parent}${sep}${k}` : k;
+                if (obj[k] !== null && typeof obj[k] === 'object' && !Array.isArray(obj[k])) {
+                    Object.assign(items, flattenDict(obj[k], newKey, sep));
+                } else if (Array.isArray(obj[k])) {
+                    obj[k].forEach((item, i) => {
+                        if (typeof item === 'object' && item !== null) {
+                            Object.assign(items, flattenDict(item, `${newKey}[${i}]`, sep));
+                        } else {
+                            items[`${newKey}[${i}]`] = item;
+                        }
+                    });
+                } else {
+                    items[newKey] = obj[k];
+                }
+            }
+            return items;
+        }
+
+        function syntaxHighlightJson(json) {
+            if (typeof json !== 'string') {
+                json = JSON.stringify(json, null, 2);
+            }
+            
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
         }
 
         function closePopup(event) {
             if (!event || event.target.id === 'popupOverlay') {
                 document.getElementById('popupOverlay').classList.remove('active');
+                document.getElementById('popupContent').classList.remove('large');
             }
         }
 
