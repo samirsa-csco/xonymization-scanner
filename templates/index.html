@@ -839,7 +839,7 @@
             return div.innerHTML;
         }
 
-        // Allow Enter key to trigger search
+        // Allow Enter key to trigger search and ESC to close popup
         document.addEventListener('DOMContentLoaded', function() {
             ['index', 'query', 'transactionField', 'earliest', 'latest'].forEach(id => {
                 document.getElementById(id).addEventListener('keypress', function(e) {
@@ -847,6 +847,13 @@
                         executeSearch();
                     }
                 });
+            });
+            
+            // ESC key closes popup
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closePopup();
+                }
             });
         });
     </script>
