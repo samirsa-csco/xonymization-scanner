@@ -405,6 +405,14 @@
             margin-bottom: 10px;
             border-radius: 4px;
             font-family: 'Courier New', monospace;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .shared-field-item:hover {
+            background: #667eea;
+            color: white;
+            transform: translateX(5px);
         }
 
         .log-message {
@@ -715,9 +723,12 @@
                     <strong>Value:</strong> ${escapeHtml(value)}<br>
                     <strong>From Field:</strong> ${escapeHtml(fieldName)}
                 </div>
+                <p style="margin: 15px 0; color: #6c757d; font-size: 0.9em;">
+                    💡 Click on any field below to see its log messages
+                </p>
                 <ul class="shared-fields-list">
                     ${sharedFields.map(field => 
-                        `<li class="shared-field-item">${escapeHtml(field)}</li>`
+                        `<li class="shared-field-item" onclick="showFieldLogs('${escapeHtml(field)}')">${escapeHtml(field)}</li>`
                     ).join('')}
                 </ul>
             `;
