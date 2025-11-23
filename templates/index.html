@@ -465,7 +465,7 @@
             let html = '';
             data.transactions.forEach(transaction => {
                 html += `
-                    <div class="transaction-item" onclick="selectTransaction('${transaction.id}')">
+                    <div class="transaction-item" onclick="selectTransaction('${transaction.id}', event)">
                         <div class="transaction-id">${transaction.id}</div>
                         <div class="transaction-count">${transaction.log_count} log${transaction.log_count > 1 ? 's' : ''}</div>
                     </div>
@@ -475,18 +475,24 @@
 
             // Auto-select first transaction
             if (data.transactions.length > 0) {
-                selectTransaction(data.transactions[0].id);
+                selectTransaction(data.transactions[0].id, null);
             }
         }
 
-        function selectTransaction(transactionId) {
+        function selectTransaction(transactionId, event) {
             selectedTransaction = transactionId;
 
             // Update active state
             document.querySelectorAll('.transaction-item').forEach(item => {
                 item.classList.remove('active');
             });
-            event.target.closest('.transaction-item').classList.add('active');
+            if (event) {
+                event.target.closest('.transaction-item').classList.add('active');
+            } else {
+                // For auto-select, find the first item
+                const firstItem = document.querySelector('.transaction-item');
+                if (firstItem) firstItem.classList.add('active');
+            }
 
             // Display details
             const details = currentData.details[transactionId];
