@@ -51,7 +51,7 @@ class SplunkClient:
         self,
         query: str,
         index: Optional[str] = None,
-        earliest_time: Optional[str] = "-24h",
+        earliest_time: Optional[str] = "-15m",
         latest_time: Optional[str] = "now",
         max_results: int = 1000,
     ) -> List[Dict[str, Any]]:
@@ -61,7 +61,7 @@ class SplunkClient:
         Args:
             query: SPL (Search Processing Language) query
             index: Splunk index to search (optional, can be in query)
-            earliest_time: Earliest time for search (default: -24h)
+            earliest_time: Earliest time for search (default: -15m)
             latest_time: Latest time for search (default: now)
             max_results: Maximum number of results to return
 

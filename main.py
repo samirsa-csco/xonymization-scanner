@@ -4,8 +4,9 @@
 import argparse
 import sys
 import os
+import json
 from typing import Optional
-from xonymization_scanner import SplunkClient, LogScanner
+from xonymization_scanner import SplunkClient, LogScanner, RawParserRegistry
 
 
 def main():
@@ -56,8 +57,8 @@ def main():
     )
     parser.add_argument(
         "--earliest",
-        default="-24h",
-        help="Earliest time for search (default: -24h)"
+        default="-15m",
+        help="Earliest time for search (default: -15m)"
     )
     parser.add_argument(
         "--latest",
@@ -76,7 +77,7 @@ def main():
         "--output-format",
         choices=["json", "csv", "summary"],
         default="json",
-        help="Output format (default: json)"
+        help="Output format (default: json). Outputs parsed _raw field content only"
     )
     parser.add_argument(
         "--output-file",
@@ -103,6 +104,14 @@ def main():
     parser.add_argument(
         "--aggregate-by",
         help="Field to aggregate results by (shows counts)"
+    )
+    
+    # Raw field parsing
+    parser.add_argument(
+        "--raw-format",
+        choices=["json", "plaintext", "keyvalue"],
+        default="json",
+        help="Format of the _raw field (default: json)"
     )
     
     # List indexes
@@ -169,37 +178,76 @@ def main():
         
         print(f"Found {len(results)} events", file=sys.stderr)
         
-        # Apply filters if specified
+        # Parse _raw field and extract only parsed content
+        raw_parser_registry = RawParserRegistry()
+        parsed_raw_only = []
+        for event in results:
+            if "_raw" in event:
+                parsed_raw = raw_parser_registry.parse(event["_raw"], args.raw_format)
+                if parsed_raw is not None:
+                    parsed_raw_only.append(parsed_raw)
+                else:
+                    # If parsing fails, include the raw text
+                    parsed_raw_only.append(event["_raw"])
+            else:
+                # If no _raw field, include the whole event
+                parsed_raw_only.append(event)
+        
+        # Replace results with just the parsed _raw content
+        results = parsed_raw_only
+        
+        # Apply filters if specified (only works if parsed content is dict-like)
         if args.filter_field and args.filter_value:
             print(f"Filtering by {args.filter_field} {args.filter_operator} {args.filter_value}", file=sys.stderr)
-            results = scanner.filter_results(
-                field=args.filter_field,
-                value=args.filter_value,
-                operator=args.filter_operator,
-            )
+            filtered = []
+            for item in results:
+                if isinstance(item, dict):
+                    # Use the parser's filter logic
+                    temp_results = scanner.parser.filter_events([item], args.filter_field, args.filter_value, args.filter_operator)
+                    filtered.extend(temp_results)
+            results = filtered
             print(f"After filtering: {len(results)} events", file=sys.stderr)
         
         # Generate output
         if args.output_format == "summary":
-            summary = scanner.get_summary()
             output = f"""
 Summary:
 --------
-Total Events: {summary['total_events']}
-Fields: {', '.join(summary['fields'][:10])}{'...' if len(summary['fields']) > 10 else ''}
-Time Range: {summary['time_range']}
+Total Events: {len(results)}
 """
-            if args.aggregate_by:
-                aggregation = scanner.aggregate_results(args.aggregate_by)
+            if args.aggregate_by and results and isinstance(results[0], dict):
+                # Aggregate by field in parsed results
+                from collections import Counter
+                field_values = [item.get(args.aggregate_by) for item in results if isinstance(item, dict) and args.aggregate_by in item]
+                aggregation = Counter(field_values)
                 output += f"\nAggregation by '{args.aggregate_by}':\n"
-                for key, count in sorted(aggregation.items(), key=lambda x: x[1], reverse=True)[:20]:
+                for key, count in aggregation.most_common(20):
                     output += f"  {key}: {count}\n"
-        elif args.aggregate_by:
-            import json
-            aggregation = scanner.aggregate_results(args.aggregate_by)
-            output = json.dumps(aggregation, indent=2)
+        elif args.aggregate_by and results and isinstance(results[0], dict):
+            from collections import Counter
+            field_values = [item.get(args.aggregate_by) for item in results if isinstance(item, dict) and args.aggregate_by in item]
+            aggregation = Counter(field_values)
+            output = json.dumps(dict(aggregation), indent=2)
+        elif args.output_format == "csv" and results and isinstance(results[0], dict):
+            # CSV output for dict results
+            import csv
+            import io
+            output_io = io.StringIO()
+            if results:
+                fields = set()
+                for item in results:
+                    if isinstance(item, dict):
+                        fields.update(item.keys())
+                fieldnames = sorted(list(fields))
+                writer = csv.DictWriter(output_io, fieldnames=fieldnames)
+                writer.writeheader()
+                for item in results:
+                    if isinstance(item, dict):
+                        writer.writerow(item)
+            output = output_io.getvalue()
         else:
-            output = scanner.export_results(format=args.output_format)
+            # Default JSON output of parsed _raw content
+            output = json.dumps(results, indent=2, default=str)
         
         # Write output
         if args.output_file:
