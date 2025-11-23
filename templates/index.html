@@ -335,6 +335,11 @@
             display: flex;
         }
 
+        #popupOverlay2 {
+            z-index: 1100;
+            background: rgba(0, 0, 0, 0.7);
+        }
+
         .popup-content {
             background: white;
             border-radius: 12px;
@@ -536,23 +541,32 @@
         </div>
     </div>
 
-    <!-- Popup for shared values -->
-    <div class="popup-overlay" id="popupOverlay" onclick="closePopup(event)">
-        <div class="popup-content" id="popupContent" onclick="event.stopPropagation()">
+    <!-- Popup for shared values (first level) -->
+    <div class="popup-overlay" id="popupOverlay1" onclick="closeTopPopup(event, 1)">
+        <div class="popup-content" id="popupContent1" onclick="event.stopPropagation()">
             <div class="popup-header">
-                <h3 id="popupTitle">Fields Sharing This Value</h3>
-                <button class="popup-close" onclick="closePopup()">&times;</button>
+                <h3 id="popupTitle1">Fields Sharing This Value</h3>
+                <button class="popup-close" onclick="closeTopPopup(null, 1)">&times;</button>
             </div>
-            <div id="popupBody">
-                <div class="popup-value" id="popupValue"></div>
-                <ul class="shared-fields-list" id="sharedFieldsList"></ul>
+            <div id="popupBody1"></div>
+        </div>
+    </div>
+
+    <!-- Popup for field logs (second level) -->
+    <div class="popup-overlay" id="popupOverlay2" onclick="closeTopPopup(event, 2)">
+        <div class="popup-content" id="popupContent2" onclick="event.stopPropagation()">
+            <div class="popup-header">
+                <h3 id="popupTitle2">Field Logs</h3>
+                <button class="popup-close" onclick="closeTopPopup(null, 2)">&times;</button>
             </div>
+            <div id="popupBody2"></div>
         </div>
     </div>
 
     <script>
         let currentData = null;
         let selectedTransaction = null;
+        let popupStack = []; // Track which popups are open
 
         async function executeSearch() {
             const index = document.getElementById('index').value;
@@ -714,11 +728,11 @@
         }
 
         function showSharedFields(fieldName, value, sharedFields) {
-            const popupContent = document.getElementById('popupContent');
+            const popupContent = document.getElementById('popupContent1');
             popupContent.classList.remove('large');
             
-            document.getElementById('popupTitle').textContent = 'Fields Sharing This Value';
-            document.getElementById('popupBody').innerHTML = `
+            document.getElementById('popupTitle1').textContent = 'Fields Sharing This Value';
+            document.getElementById('popupBody1').innerHTML = `
                 <div class="popup-value">
                     <strong>Value:</strong> ${escapeHtml(value)}<br>
                     <strong>From Field:</strong> ${escapeHtml(fieldName)}
@@ -728,15 +742,16 @@
                 </p>
                 <ul class="shared-fields-list">
                     ${sharedFields.map(field => 
-                        `<li class="shared-field-item" onclick="showFieldLogs('${escapeHtml(field)}')">${escapeHtml(field)}</li>`
+                        `<li class="shared-field-item" onclick="showFieldLogs('${escapeHtml(field)}', true)">${escapeHtml(field)}</li>`
                     ).join('')}
                 </ul>
             `;
             
-            document.getElementById('popupOverlay').classList.add('active');
+            document.getElementById('popupOverlay1').classList.add('active');
+            popupStack = [1]; // Reset stack with first popup
         }
 
-        function showFieldLogs(fieldName) {
+        function showFieldLogs(fieldName, isSecondLevel = false) {
             const details = currentData.details[selectedTransaction];
             const logs = details.logs;
             
@@ -750,26 +765,53 @@
                 }
             });
             
-            const popupContent = document.getElementById('popupContent');
-            popupContent.classList.add('large');
-            
-            document.getElementById('popupTitle').textContent = `Logs Containing Field: ${fieldName}`;
-            
-            let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithField.length} log${logsWithField.length > 1 ? 's' : ''}</p>`;
-            
-            logsWithField.forEach(item => {
-                bodyHtml += `
-                    <div class="log-message">
-                        <div class="log-message-header">
-                            <span class="log-number">Log #${item.index}</span>
+            if (isSecondLevel) {
+                // Show in second popup (stacked on top)
+                const popupContent = document.getElementById('popupContent2');
+                popupContent.classList.add('large');
+                
+                document.getElementById('popupTitle2').textContent = `Logs Containing Field: ${fieldName}`;
+                
+                let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithField.length} log${logsWithField.length > 1 ? 's' : ''}</p>`;
+                
+                logsWithField.forEach(item => {
+                    bodyHtml += `
+                        <div class="log-message">
+                            <div class="log-message-header">
+                                <span class="log-number">Log #${item.index}</span>
+                            </div>
+                            <div class="json-content">${syntaxHighlightJson(item.log)}</div>
                         </div>
-                        <div class="json-content">${syntaxHighlightJson(item.log)}</div>
-                    </div>
-                `;
-            });
-            
-            document.getElementById('popupBody').innerHTML = bodyHtml;
-            document.getElementById('popupOverlay').classList.add('active');
+                    `;
+                });
+                
+                document.getElementById('popupBody2').innerHTML = bodyHtml;
+                document.getElementById('popupOverlay2').classList.add('active');
+                popupStack.push(2);
+            } else {
+                // Show in first popup (direct click from table)
+                const popupContent = document.getElementById('popupContent1');
+                popupContent.classList.add('large');
+                
+                document.getElementById('popupTitle1').textContent = `Logs Containing Field: ${fieldName}`;
+                
+                let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithField.length} log${logsWithField.length > 1 ? 's' : ''}</p>`;
+                
+                logsWithField.forEach(item => {
+                    bodyHtml += `
+                        <div class="log-message">
+                            <div class="log-message-header">
+                                <span class="log-number">Log #${item.index}</span>
+                            </div>
+                            <div class="json-content">${syntaxHighlightJson(item.log)}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('popupBody1').innerHTML = bodyHtml;
+                document.getElementById('popupOverlay1').classList.add('active');
+                popupStack = [1];
+            }
         }
 
         function flattenDict(obj, parent = '', sep = '.') {
@@ -817,10 +859,25 @@
             });
         }
 
-        function closePopup(event) {
-            if (!event || event.target.id === 'popupOverlay') {
-                document.getElementById('popupOverlay').classList.remove('active');
-                document.getElementById('popupContent').classList.remove('large');
+        function closeTopPopup(event, level) {
+            // Only close if clicking overlay (not content) or explicit close
+            if (event && event.target.id !== `popupOverlay${level}`) {
+                return;
+            }
+            
+            // Close the topmost popup in the stack
+            if (popupStack.length > 0) {
+                const topPopup = popupStack[popupStack.length - 1];
+                document.getElementById(`popupOverlay${topPopup}`).classList.remove('active');
+                document.getElementById(`popupContent${topPopup}`).classList.remove('large');
+                popupStack.pop();
+            }
+        }
+
+        function closeAllPopups() {
+            // Close all popups
+            while (popupStack.length > 0) {
+                closeTopPopup(null, popupStack[popupStack.length - 1]);
             }
         }
 
@@ -849,10 +906,10 @@
                 });
             });
             
-            // ESC key closes popup
+            // ESC key closes top popup
             document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    closePopup();
+                if (e.key === 'Escape' && popupStack.length > 0) {
+                    closeTopPopup(null, popupStack[popupStack.length - 1]);
                 }
             });
         });
