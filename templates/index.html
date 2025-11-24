@@ -123,6 +123,14 @@
             min-height: 600px;
         }
 
+        .content-area.no-grouping {
+            grid-template-columns: 1fr;
+        }
+
+        .content-area.no-grouping .transactions-list {
+            display: none;
+        }
+
         .transactions-list {
             background: #f8f9fa;
             border-right: 2px solid #e9ecef;
@@ -541,8 +549,11 @@
                     <input type="text" id="query" placeholder="e.g., sourcetype=&quot;oracle-server&quot; environment=&quot;dev&quot;" value="">
                 </div>
                 <div class="form-group">
-                    <label for="transactionField">Transaction ID Field</label>
-                    <input type="text" id="transactionField" placeholder="Field name" value="serviceChainId">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="groupByEnabled" onchange="toggleGroupByField()" checked style="width: auto; height: 18px; cursor: pointer;">
+                        <span>Group By Field</span>
+                    </label>
+                    <input type="text" id="groupByField" placeholder="Field name" value="serviceChainId" style="margin-top: 8px;">
                 </div>
             </div>
             <div style="display: flex; gap: 20px; align-items: flex-end;">
@@ -555,7 +566,7 @@
                     <input type="text" id="latest" placeholder="now" value="now">
                 </div>
                 <button class="btn btn-primary" onclick="executeSearch()" id="searchBtn">
-                    Search & Group
+                    Search
                 </button>
             </div>
         </div>
@@ -612,10 +623,22 @@
         let selectedTransaction = null;
         let popupStack = []; // Track which popups are open
 
+        function toggleGroupByField() {
+            const enabled = document.getElementById('groupByEnabled').checked;
+            const field = document.getElementById('groupByField');
+            field.disabled = !enabled;
+            if (!enabled) {
+                field.style.opacity = '0.5';
+            } else {
+                field.style.opacity = '1';
+            }
+        }
+
         async function executeSearch() {
             const index = document.getElementById('index').value;
             const query = document.getElementById('query').value;
-            const transactionField = document.getElementById('transactionField').value;
+            const groupByEnabled = document.getElementById('groupByEnabled').checked;
+            const groupByField = document.getElementById('groupByField').value;
             const earliest = document.getElementById('earliest').value;
             const latest = document.getElementById('latest').value;
 
@@ -639,7 +662,8 @@
                     body: JSON.stringify({
                         index: index || null,
                         query: query,
-                        transaction_field: transactionField,
+                        group_by_enabled: groupByEnabled,
+                        group_by_field: groupByField,
                         earliest: earliest,
                         latest: latest
                     })
@@ -663,7 +687,15 @@
         }
 
         function displayResults(data) {
-            document.getElementById('contentArea').style.display = 'grid';
+            const contentArea = document.getElementById('contentArea');
+            contentArea.style.display = 'grid';
+            
+            // Toggle sidebar based on grouping
+            if (data.grouped) {
+                contentArea.classList.remove('no-grouping');
+            } else {
+                contentArea.classList.add('no-grouping');
+            }
 
             // Display transactions list
             const transactionsList = document.getElementById('transactionsList');
@@ -699,7 +731,7 @@
             });
             transactionsList.innerHTML = html;
 
-            // Auto-select first transaction
+            // Auto-select first transaction (or the only group if not grouped)
             if (data.transactions.length > 0) {
                 selectTransaction(data.transactions[0].id, null);
             }

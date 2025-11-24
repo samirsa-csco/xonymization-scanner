@@ -50,12 +50,13 @@ def get_indexes():
 
 @app.route('/api/search', methods=['POST'])
 def search():
-    """Execute a Splunk search and return results grouped by transaction."""
+    """Execute a Splunk search and return results, optionally grouped by transaction."""
     try:
         data = request.json
         index = data.get('index')
         query = data.get('query')
-        transaction_field = data.get('transaction_field', 'serviceChainId')
+        group_by_enabled = data.get('group_by_enabled', False)
+        group_by_field = data.get('group_by_field', 'serviceChainId')
         earliest = data.get('earliest', '-15m')
         latest = data.get('latest', 'now')
         max_results = data.get('max_results', 1000)
@@ -77,8 +78,12 @@ def search():
             parse_raw=True
         )
         
-        # Group by transaction
-        transactions = scanner.group_by_transaction(transaction_field)
+        # Group by transaction if enabled
+        if group_by_enabled and group_by_field:
+            transactions = scanner.group_by_transaction(group_by_field)
+        else:
+            # No grouping - treat all results as a single group
+            transactions = {'all_results': results}
         
         # Format response
         transaction_list = []
@@ -130,6 +135,8 @@ def search():
         return jsonify({
             'success': True,
             'total_results': len(results),
+            'grouped': group_by_enabled and group_by_field,
+            'group_by_field': group_by_field if group_by_enabled else None,
             'transaction_count': len(transactions),
             'transactions': transaction_list,
             'details': transaction_details
