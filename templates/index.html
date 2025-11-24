@@ -251,17 +251,6 @@
             color: #6c757d;
         }
 
-        .multi-value {
-            background: #ffc107;
-            color: #000;
-            cursor: pointer;
-        }
-
-        .multi-value:hover {
-            background: #ff9800;
-            transform: translateY(-1px);
-        }
-
         .loading {
             display: none;
             text-align: center;
@@ -309,24 +298,51 @@
         }
 
         .value-badge.single-value {
+            background: #d4edda;
+            color: #155724;
             cursor: pointer;
         }
 
         .value-badge.single-value:hover {
-            background: #667eea;
+            background: #28a745;
             color: white;
             transform: translateY(-1px);
         }
 
         .value-badge.clickable {
             background: #d4edda;
-            border: 1px solid #c3e6cb;
+            color: #155724;
             cursor: pointer;
+            box-shadow: 
+                3px 3px 0 0 #a8d5a8,
+                6px 6px 0 0 #8bc98b;
         }
 
         .value-badge.clickable:hover {
             background: #28a745;
             color: white;
+            transform: translateY(-1px);
+            box-shadow: 
+                3px 3px 0 0 #1e7e34,
+                6px 6px 0 0 #155724;
+        }
+
+        .value-badge.multi-value {
+            background: #d4edda;
+            color: #155724;
+            cursor: pointer;
+            box-shadow: 
+                3px 3px 0 0 #a8d5a8,
+                6px 6px 0 0 #8bc98b;
+        }
+
+        .value-badge.multi-value:hover {
+            background: #28a745;
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 
+                3px 3px 0 0 #1e7e34,
+                6px 6px 0 0 #155724;
         }
 
         .value-badge.pii-value {
