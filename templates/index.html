@@ -262,19 +262,6 @@
             transform: translateY(-1px);
         }
 
-        .pii-value {
-            background: #ffb3ba;
-            border: 1px solid #ff8a8a;
-            color: #8b0000;
-            cursor: pointer;
-        }
-
-        .pii-value:hover {
-            background: #dc3545;
-            color: white;
-            transform: translateY(-1px);
-        }
-
         .loading {
             display: none;
             text-align: center;
@@ -340,6 +327,18 @@
         .value-badge.clickable:hover {
             background: #28a745;
             color: white;
+        }
+
+        .value-badge.pii-value {
+            background: #ffb3ba;
+            color: #8b0000;
+            cursor: pointer;
+        }
+
+        .value-badge.pii-value:hover {
+            background: #dc3545;
+            color: white;
+            transform: translateY(-1px);
         }
 
         .popup-overlay {
