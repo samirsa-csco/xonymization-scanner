@@ -299,6 +299,7 @@
             margin: 2px;
             font-size: 0.9em;
             transition: all 0.2s;
+            user-select: none;
         }
 
         .value-badge.single-value {
@@ -314,6 +315,7 @@
         .value-badge.clickable {
             background: #d4edda;
             border: 1px solid #c3e6cb;
+            cursor: pointer;
         }
 
         .value-badge.clickable:hover {
@@ -700,6 +702,7 @@
             details.fields.forEach(field => {
                 const isMultiValue = field.unique_count > 1;
                 const fieldSharedValues = sharedValues[field.field] || {};
+                const fieldNameEscaped = field.field.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 
                 const valuesHtml = field.values.map(v => {
                     const valueStr = String(v);
@@ -714,11 +717,12 @@
                     } else if (hasSharedFields) {
                         // Single value with shared fields: green, shows shared fields
                         badgeClass = 'clickable';
-                        onclick = `onclick="showSharedFields('${escapeHtml(field.field)}', '${escapeHtml(valueStr)}', ${JSON.stringify(fieldSharedValues[valueStr]).replace(/"/g, '&quot;')})"`;
+                        const sharedFieldsJson = JSON.stringify(fieldSharedValues[valueStr]).replace(/"/g, '&quot;');
+                        onclick = `onclick="showSharedFields('${fieldNameEscaped}', '${escapeHtml(valueStr)}', ${sharedFieldsJson})"`;
                     } else {
                         // Single value, no shared fields: gray, shows field logs
                         badgeClass = 'single-value';
-                        onclick = `onclick="showFieldLogs('${escapeHtml(field.field)}', false)"`;
+                        onclick = `onclick="showFieldLogs('${fieldNameEscaped}', false)"`;
                     }
                     
                     return `<span class="value-badge ${badgeClass}" ${onclick}>${escapeHtml(valueStr)}</span>`;
@@ -726,7 +730,7 @@
 
                 html += `
                     <tr>
-                        <td class="field-name" onclick="showFieldLogs('${escapeHtml(field.field)}')">${escapeHtml(field.field)}</td>
+                        <td class="field-name" onclick="showFieldLogs('${fieldNameEscaped}')">${escapeHtml(field.field)}</td>
                         <td class="field-values">${valuesHtml}</td>
                         <td style="text-align: center;">${field.unique_count}</td>
                     </tr>
