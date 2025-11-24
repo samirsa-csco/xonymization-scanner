@@ -713,7 +713,14 @@
                 const valuesHtml = field.values.map(v => {
                     const valueStr = String(v);
                     const hasSharedFields = fieldSharedValues[valueStr] && fieldSharedValues[valueStr].length > 0;
-                    const valueEscaped = escapeHtml(valueStr).replace(/'/g, "\\'");
+                    // Escape value for use in HTML attribute - handle all special characters
+                    const valueEscaped = valueStr
+                        .replace(/\\/g, '\\\\')
+                        .replace(/'/g, "\\'")
+                        .replace(/"/g, '\\"')
+                        .replace(/\n/g, '\\n')
+                        .replace(/\r/g, '\\r')
+                        .replace(/\t/g, '\\t');
                     
                     let badgeClass = '';
                     let onclick = '';
@@ -722,7 +729,7 @@
                         // Value shared with other fields: green, shows shared fields
                         badgeClass = 'clickable';
                         const sharedFieldsJson = JSON.stringify(fieldSharedValues[valueStr]).replace(/"/g, '&quot;');
-                        onclick = `onclick="showSharedFields('${fieldNameEscaped}', '${escapeHtml(valueStr)}', ${sharedFieldsJson})"`;
+                        onclick = `onclick="showSharedFields('${fieldNameEscaped}', '${valueEscaped}', ${sharedFieldsJson})"`;
                     } else if (isMultiValue) {
                         // Multi-value, not shared: yellow, shows logs with this value
                         badgeClass = 'multi-value';
@@ -786,7 +793,7 @@
             const logsWithValue = [];
             logs.forEach((log, index) => {
                 const flattened = flattenDict(log);
-                if (flattened[fieldName] && String(flattened[fieldName]) === value) {
+                if (fieldName in flattened && String(flattened[fieldName]) === value) {
                     logsWithValue.push({ index: index + 1, log: log });
                 }
             });
