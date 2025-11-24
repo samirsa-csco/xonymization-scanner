@@ -285,6 +285,42 @@ Total Events: {len(self.results)}
         """
         return len(self.results)
     
+    def _detect_pii(self, value: Any) -> str:
+        """
+        Detect if a value is potentially PII (Personally Identifiable Information).
+        
+        Args:
+            value: Value to check
+            
+        Returns:
+            'pii' if potentially PII, 'none' otherwise
+        """
+        import re
+        
+        if value is None:
+            return 'none'
+        
+        value_str = str(value)
+        
+        # IP address pattern (IPv4)
+        ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+        if re.match(ip_pattern, value_str):
+            parts = value_str.split('.')
+            if all(0 <= int(part) <= 255 for part in parts):
+                return 'pii'
+        
+        # Domain name pattern (basic check for domain-like strings)
+        domain_pattern = r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+        if re.match(domain_pattern, value_str):
+            return 'pii'
+        
+        # Email pattern
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if re.match(email_pattern, value_str):
+            return 'pii'
+        
+        return 'none'
+    
     def _flatten_dict(self, d: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
         """
         Flatten a nested dictionary with dot notation.

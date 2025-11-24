@@ -100,13 +100,21 @@ def search():
                     if value not in all_fields[key]:
                         all_fields[key].append(value)
             
-            # Convert to list format for table display
+            # Convert to list format for table display with PII classification
             fields_list = []
             for key in sorted(all_fields.keys()):
                 values = all_fields[key]
+                # Add PII classification for each value
+                values_with_pii = []
+                for value in values:
+                    pii_type = scanner._detect_pii(value)
+                    values_with_pii.append({
+                        'value': value,
+                        'pii': pii_type
+                    })
                 fields_list.append({
                     'field': key,
-                    'values': values,
+                    'values': values_with_pii,
                     'unique_count': len(values)
                 })
             
