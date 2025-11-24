@@ -254,6 +254,12 @@
         .multi-value {
             background: #ffc107;
             color: #000;
+            cursor: pointer;
+        }
+
+        .multi-value:hover {
+            background: #ff9800;
+            transform: translateY(-1px);
         }
 
         .loading {
@@ -707,22 +713,24 @@
                 const valuesHtml = field.values.map(v => {
                     const valueStr = String(v);
                     const hasSharedFields = fieldSharedValues[valueStr] && fieldSharedValues[valueStr].length > 0;
+                    const valueEscaped = escapeHtml(valueStr).replace(/'/g, "\\'");
                     
                     let badgeClass = '';
                     let onclick = '';
                     
-                    if (isMultiValue) {
-                        // Multi-value: yellow, not clickable
-                        badgeClass = 'multi-value';
-                    } else if (hasSharedFields) {
-                        // Single value with shared fields: green, shows shared fields
+                    if (hasSharedFields) {
+                        // Value shared with other fields: green, shows shared fields
                         badgeClass = 'clickable';
                         const sharedFieldsJson = JSON.stringify(fieldSharedValues[valueStr]).replace(/"/g, '&quot;');
                         onclick = `onclick="showSharedFields('${fieldNameEscaped}', '${escapeHtml(valueStr)}', ${sharedFieldsJson})"`;
+                    } else if (isMultiValue) {
+                        // Multi-value, not shared: yellow, shows logs with this value
+                        badgeClass = 'multi-value';
+                        onclick = `onclick="showLogsWithValue('${fieldNameEscaped}', '${valueEscaped}', false)"`;
                     } else {
-                        // Single value, no shared fields: gray, shows field logs
+                        // Single value, no shared fields: gray, shows logs with this value
                         badgeClass = 'single-value';
-                        onclick = `onclick="showFieldLogs('${fieldNameEscaped}', false)"`;
+                        onclick = `onclick="showLogsWithValue('${fieldNameEscaped}', '${valueEscaped}', false)"`;
                     }
                     
                     return `<span class="value-badge ${badgeClass}" ${onclick}>${escapeHtml(valueStr)}</span>`;
@@ -768,6 +776,70 @@
             
             document.getElementById('popupOverlay1').classList.add('active');
             popupStack = [1]; // Reset stack with first popup
+        }
+
+        function showLogsWithValue(fieldName, value, isSecondLevel = false) {
+            const details = currentData.details[selectedTransaction];
+            const logs = details.logs;
+            
+            // Find all logs where this field has this specific value
+            const logsWithValue = [];
+            logs.forEach((log, index) => {
+                const flattened = flattenDict(log);
+                if (flattened[fieldName] && String(flattened[fieldName]) === value) {
+                    logsWithValue.push({ index: index + 1, log: log });
+                }
+            });
+            
+            if (logsWithValue.length === 0) return;
+            
+            if (isSecondLevel) {
+                // Show in second popup (stacked on top)
+                const popupContent = document.getElementById('popupContent2');
+                popupContent.classList.add('large');
+                
+                document.getElementById('popupTitle2').textContent = `Logs Where ${fieldName} = ${value}`;
+                
+                let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithValue.length} log${logsWithValue.length > 1 ? 's' : ''}</p>`;
+                
+                logsWithValue.forEach(item => {
+                    bodyHtml += `
+                        <div class="log-message">
+                            <div class="log-message-header">
+                                <span class="log-number">Log #${item.index}</span>
+                            </div>
+                            <div class="json-content">${syntaxHighlightJson(item.log)}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('popupBody2').innerHTML = bodyHtml;
+                document.getElementById('popupOverlay2').classList.add('active');
+                popupStack.push(2);
+            } else {
+                // Show in first popup (direct click from table)
+                const popupContent = document.getElementById('popupContent1');
+                popupContent.classList.add('large');
+                
+                document.getElementById('popupTitle1').textContent = `Logs Where ${fieldName} = ${value}`;
+                
+                let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithValue.length} log${logsWithValue.length > 1 ? 's' : ''}</p>`;
+                
+                logsWithValue.forEach(item => {
+                    bodyHtml += `
+                        <div class="log-message">
+                            <div class="log-message-header">
+                                <span class="log-number">Log #${item.index}</span>
+                            </div>
+                            <div class="json-content">${syntaxHighlightJson(item.log)}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('popupBody1').innerHTML = bodyHtml;
+                document.getElementById('popupOverlay1').classList.add('active');
+                popupStack = [1];
+            }
         }
 
         function showFieldLogs(fieldName, isSecondLevel = false) {
