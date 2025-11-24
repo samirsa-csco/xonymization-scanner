@@ -163,19 +163,27 @@ class SplunkClient:
         
         return results
 
-    def get_indexes(self) -> List[str]:
+    def get_indexes(self, search_term: str = None) -> List[str]:
         """
-        Get list of available Splunk indexes.
+        Get list of available Splunk indexes, optionally filtered by search term.
+
+        Args:
+            search_term: Optional search term to filter indexes (e.g., "ora" to find indexes containing "ora")
 
         Returns:
             List of index names
         """
         url = f"{self.base_url}/services/data/indexes"
+        params = {"output_mode": "json"}
+        
+        # Add search filter if provided
+        if search_term:
+            params["search"] = f"name=*{search_term}*"
         
         try:
             response = self.session.get(
                 url,
-                params={"output_mode": "json"},
+                params=params,
                 verify=self.verify_ssl,
             )
             response.raise_for_status()

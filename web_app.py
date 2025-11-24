@@ -39,10 +39,11 @@ def index():
 
 @app.route('/api/indexes', methods=['GET'])
 def get_indexes():
-    """Get list of available Splunk indexes."""
+    """Get list of available Splunk indexes, optionally filtered by search term."""
     try:
+        search_term = request.args.get('search', None)
         client = get_splunk_client()
-        indexes = client.get_indexes()
+        indexes = client.get_indexes(search_term=search_term)
         return jsonify({'success': True, 'indexes': indexes})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

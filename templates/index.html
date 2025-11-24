@@ -89,6 +89,16 @@
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
+        /* Style for datalist dropdown */
+        input[list]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            opacity: 0.6;
+        }
+
+        input[list]::-webkit-calendar-picker-indicator:hover {
+            opacity: 1;
+        }
+
         .btn {
             padding: 12px 32px;
             border: none;
@@ -542,7 +552,8 @@
             <div class="search-row">
                 <div class="form-group">
                     <label for="index">Index</label>
-                    <input type="text" id="index" placeholder="e.g., main" value="">
+                    <input type="text" id="index" list="indexList" placeholder="e.g., main" value="" autocomplete="off">
+                    <datalist id="indexList"></datalist>
                 </div>
                 <div class="form-group">
                     <label for="query">Splunk Query (SPL)</label>
@@ -622,6 +633,59 @@
         let currentData = null;
         let selectedTransaction = null;
         let popupStack = []; // Track which popups are open
+
+        let indexSearchTimeout = null;
+
+        // Load indexes with optional search filter
+        async function loadIndexes(searchTerm = '') {
+            try {
+                const url = searchTerm 
+                    ? `/api/indexes?search=${encodeURIComponent(searchTerm)}`
+                    : '/api/indexes';
+                    
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success && data.indexes) {
+                    const datalist = document.getElementById('indexList');
+                    datalist.innerHTML = data.indexes
+                        .map(index => `<option value="${index}">`)
+                        .join('');
+                }
+            } catch (error) {
+                console.error('Failed to load indexes:', error);
+            }
+        }
+
+        // Debounced search for indexes as user types
+        function onIndexInput(event) {
+            const searchTerm = event.target.value;
+            
+            // Clear previous timeout
+            if (indexSearchTimeout) {
+                clearTimeout(indexSearchTimeout);
+            }
+            
+            // Only search if user has typed at least 1 character
+            if (searchTerm.length >= 1) {
+                // Debounce: wait 300ms after user stops typing
+                indexSearchTimeout = setTimeout(() => {
+                    loadIndexes(searchTerm);
+                }, 300);
+            } else {
+                // Load all indexes if field is empty
+                loadIndexes();
+            }
+        }
+
+        // Load initial indexes when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            loadIndexes();
+            
+            // Add input listener for dynamic search
+            const indexInput = document.getElementById('index');
+            indexInput.addEventListener('input', onIndexInput);
+        });
 
         function toggleGroupByField() {
             const enabled = document.getElementById('groupByEnabled').checked;
