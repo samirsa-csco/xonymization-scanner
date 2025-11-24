@@ -49,6 +49,25 @@ def get_indexes():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/sourcetypes', methods=['GET'])
+def get_sourcetypes():
+    """Get list of available sourcetypes, optionally filtered by index."""
+    try:
+        index = request.args.get('index', None)
+        search_term = request.args.get('search', None)
+        
+        if not index:
+            return jsonify({'success': False, 'error': 'Index parameter is required'}), 400
+        
+        client = get_splunk_client()
+        sourcetypes = client.get_sourcetypes(index=index, search_term=search_term)
+        return jsonify({'success': True, 'sourcetypes': sourcetypes})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/search', methods=['POST'])
 def search():
     """Execute a Splunk search and return results, optionally grouped by transaction."""

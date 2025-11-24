@@ -99,6 +99,19 @@
             opacity: 1;
         }
 
+        .query-builder-icon {
+            cursor: pointer;
+            font-size: 1.2em;
+            opacity: 0.7;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .query-builder-icon:hover {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
         .btn {
             padding: 12px 32px;
             border: none;
@@ -539,6 +552,78 @@
             max-width: 900px;
             width: 90vw;
         }
+
+        .query-builder-content {
+            padding: 20px;
+        }
+
+        .query-builder-section {
+            margin-bottom: 20px;
+        }
+
+        .query-builder-section h3 {
+            margin-bottom: 10px;
+            color: #495057;
+            font-size: 1.1em;
+        }
+
+        .query-builder-info {
+            background: #e7f3ff;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .sourcetype-search {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 1em;
+            margin-bottom: 15px;
+        }
+
+        .sourcetype-search:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .sourcetype-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            background: white;
+        }
+
+        .sourcetype-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e9ecef;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Courier New', monospace;
+        }
+
+        .sourcetype-item:last-child {
+            border-bottom: none;
+        }
+
+        .sourcetype-item:hover {
+            background: #e7f3ff;
+            padding-left: 20px;
+        }
+
+        .sourcetype-loading {
+            padding: 40px;
+            text-align: center;
+            color: #6c757d;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -556,7 +641,10 @@
                     <datalist id="indexList"></datalist>
                 </div>
                 <div class="form-group">
-                    <label for="query">Splunk Query (SPL)</label>
+                    <label for="query" style="display: flex; align-items: center; gap: 8px;">
+                        <span>Splunk Query (SPL)</span>
+                        <span class="query-builder-icon" onclick="openQueryBuilder()" title="Query Builder">🔧</span>
+                    </label>
                     <input type="text" id="query" placeholder="e.g., sourcetype=&quot;oracle-server&quot; environment=&quot;dev&quot;" value="">
                 </div>
                 <div class="form-group">
@@ -1130,22 +1218,158 @@
             return div.innerHTML;
         }
 
+        // Query Builder Functions
+        let sourcetypeSearchTimeout = null;
+
+        async function openQueryBuilder() {
+            const index = document.getElementById('index').value;
+            
+            if (!index) {
+                showError('Please select an index first');
+                return;
+            }
+
+            // Reset sourcetypes cache for fresh data
+            allSourcetypes = [];
+
+            // Show popup with loading state
+            const popupContent = document.getElementById('popupContent1');
+            popupContent.classList.remove('large');
+            
+            document.getElementById('popupTitle1').textContent = 'Query Builder';
+            document.getElementById('popupBody1').innerHTML = `
+                <div class="query-builder-content">
+                    <div class="query-builder-section">
+                        <div class="query-builder-info">
+                            <strong>Selected Index:</strong> ${escapeHtml(index)}
+                        </div>
+                    </div>
+                    <div class="query-builder-section">
+                        <h3>Select Sourcetype</h3>
+                        <input type="text" 
+                               class="sourcetype-search" 
+                               id="sourcetypeSearch" 
+                               placeholder="Filter sourcetypes..." 
+                               oninput="onSourcetypeSearch(event)">
+                        <div class="sourcetype-list" id="sourcetypeList">
+                            <div class="sourcetype-loading">
+                                <div style="display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                                <p style="margin-top: 10px;">Loading sourcetypes...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('popupOverlay1').classList.add('active');
+            popupStack = [1];
+
+            // Load sourcetypes for the selected index
+            await loadSourcetypes(index);
+        }
+
+        let allSourcetypes = []; // Store all sourcetypes for client-side filtering
+
+        async function loadSourcetypes(index, searchTerm = '') {
+            try {
+                const listContainer = document.getElementById('sourcetypeList');
+                
+                // If no search term and we haven't loaded yet, fetch from server
+                if (!searchTerm && allSourcetypes.length === 0) {
+                    const url = `/api/sourcetypes?index=${encodeURIComponent(index)}`;
+                    console.log('Fetching sourcetypes from:', url);
+                    
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    console.log('Sourcetypes response:', data);
+                    
+                    if (data.success && data.sourcetypes) {
+                        allSourcetypes = data.sourcetypes;
+                        console.log(`Loaded ${allSourcetypes.length} sourcetypes`);
+                    } else {
+                        const errorMsg = data.error || 'Unknown error';
+                        listContainer.innerHTML = `<div class="sourcetype-loading">Error: ${escapeHtml(errorMsg)}</div>`;
+                        return;
+                    }
+                }
+                
+                // Filter sourcetypes client-side
+                let filteredSourcetypes = allSourcetypes;
+                if (searchTerm) {
+                    const searchLower = searchTerm.toLowerCase();
+                    filteredSourcetypes = allSourcetypes.filter(st => st.toLowerCase().includes(searchLower));
+                }
+                
+                // Display results
+                if (filteredSourcetypes.length > 0) {
+                    listContainer.innerHTML = filteredSourcetypes
+                        .map(st => {
+                            const escaped = st.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                            return `<div class="sourcetype-item" onclick="selectSourcetype('${escaped}')">${escapeHtml(st)}</div>`;
+                        })
+                        .join('');
+                } else {
+                    listContainer.innerHTML = '<div class="sourcetype-loading">No sourcetypes found</div>';
+                }
+            } catch (error) {
+                console.error('Failed to load sourcetypes:', error);
+                const listContainer = document.getElementById('sourcetypeList');
+                if (listContainer) {
+                    listContainer.innerHTML = `<div class="sourcetype-loading">Error: ${escapeHtml(error.message)}</div>`;
+                }
+            }
+        }
+
+        function onSourcetypeSearch(event) {
+            const searchTerm = event.target.value;
+            
+            // Instant client-side filtering (no debounce needed)
+            const searchLower = searchTerm.toLowerCase();
+            const filteredSourcetypes = searchTerm 
+                ? allSourcetypes.filter(st => st.toLowerCase().includes(searchLower))
+                : allSourcetypes;
+            
+            const listContainer = document.getElementById('sourcetypeList');
+            if (filteredSourcetypes.length > 0) {
+                listContainer.innerHTML = filteredSourcetypes
+                    .map(st => {
+                        const escaped = st.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        return `<div class="sourcetype-item" onclick="selectSourcetype('${escaped}')">${escapeHtml(st)}</div>`;
+                    })
+                    .join('');
+            } else {
+                listContainer.innerHTML = '<div class="sourcetype-loading">No sourcetypes match your filter</div>';
+            }
+        }
+
+        function selectSourcetype(sourcetype) {
+            // Set the query field with the selected sourcetype
+            document.getElementById('query').value = `sourcetype="${sourcetype}"`;
+            
+            // Close the popup
+            closeTopPopup(null, 1);
+        }
+
         // Allow Enter key to trigger search and ESC to close popup
         document.addEventListener('DOMContentLoaded', function() {
-            ['index', 'query', 'transactionField', 'earliest', 'latest'].forEach(id => {
-                document.getElementById(id).addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        executeSearch();
-                    }
-                });
-            });
-            
-            // ESC key closes top popup
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && popupStack.length > 0) {
-                    closeTopPopup(null, popupStack[popupStack.length - 1]);
+            ['index', 'query', 'groupByField', 'earliest', 'latest'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            executeSearch();
+                        }
+                    });
                 }
             });
+        });
+        
+        // ESC key closes top popup (global handler, not inside DOMContentLoaded)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && popupStack.length > 0) {
+                closeTopPopup(null, popupStack[popupStack.length - 1]);
+            }
         });
     </script>
 </body>

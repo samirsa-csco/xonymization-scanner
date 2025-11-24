@@ -200,6 +200,51 @@ class SplunkClient:
         except requests.exceptions.RequestException as e:
             raise ConnectionError(f"Failed to get indexes: {e}")
 
+    def get_sourcetypes(self, index: str = None, search_term: str = None) -> List[str]:
+        """
+        Get list of available sourcetypes for a specific index.
+
+        Args:
+            index: Required index to get sourcetypes from
+            search_term: Optional search term to filter sourcetypes
+
+        Returns:
+            List of sourcetype names
+            
+        Raises:
+            ValueError: If index is not provided
+        """
+        if not index:
+            raise ValueError("Index is required to get sourcetypes")
+        
+        # Use a simple search query to get sourcetypes from actual data
+        search_query = f"index={index} | stats count by sourcetype | fields sourcetype"
+        
+        try:
+            # Execute the search with a reasonable time range
+            results = self.search(
+                search_query, 
+                earliest_time="-7d",  # Look back 7 days for recent data
+                latest_time="now",
+                max_results=1000
+            )
+            
+            sourcetypes = [
+                result.get("sourcetype")
+                for result in results
+                if result.get("sourcetype")
+            ]
+            
+            # Apply client-side filtering if search term provided
+            if search_term:
+                search_lower = search_term.lower()
+                sourcetypes = [st for st in sourcetypes if search_lower in st.lower()]
+            
+            return sorted(sourcetypes)
+
+        except Exception as e:
+            raise ConnectionError(f"Failed to get sourcetypes: {e}")
+
     def test_connection(self) -> bool:
         """
         Test connection to Splunk server.
