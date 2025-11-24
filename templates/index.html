@@ -298,11 +298,14 @@
             border-radius: 12px;
             margin: 2px;
             font-size: 0.9em;
-            cursor: pointer;
             transition: all 0.2s;
         }
 
-        .value-badge:hover {
+        .value-badge.single-value {
+            cursor: pointer;
+        }
+
+        .value-badge.single-value:hover {
             background: #667eea;
             color: white;
             transform: translateY(-1px);
@@ -701,12 +704,24 @@
                 const valuesHtml = field.values.map(v => {
                     const valueStr = String(v);
                     const hasSharedFields = fieldSharedValues[valueStr] && fieldSharedValues[valueStr].length > 0;
-                    const clickableClass = hasSharedFields && !isMultiValue ? 'clickable' : '';
-                    const multiClass = isMultiValue ? 'multi-value' : '';
-                    const onclick = hasSharedFields && !isMultiValue ? 
-                        `onclick="showSharedFields('${escapeHtml(field.field)}', '${escapeHtml(valueStr)}', ${JSON.stringify(fieldSharedValues[valueStr]).replace(/"/g, '&quot;')})"` : '';
                     
-                    return `<span class="value-badge ${clickableClass} ${multiClass}" ${onclick}>${escapeHtml(valueStr)}</span>`;
+                    let badgeClass = '';
+                    let onclick = '';
+                    
+                    if (isMultiValue) {
+                        // Multi-value: yellow, not clickable
+                        badgeClass = 'multi-value';
+                    } else if (hasSharedFields) {
+                        // Single value with shared fields: green, shows shared fields
+                        badgeClass = 'clickable';
+                        onclick = `onclick="showSharedFields('${escapeHtml(field.field)}', '${escapeHtml(valueStr)}', ${JSON.stringify(fieldSharedValues[valueStr]).replace(/"/g, '&quot;')})"`;
+                    } else {
+                        // Single value, no shared fields: gray, shows field logs
+                        badgeClass = 'single-value';
+                        onclick = `onclick="showFieldLogs('${escapeHtml(field.field)}', false)"`;
+                    }
+                    
+                    return `<span class="value-badge ${badgeClass}" ${onclick}>${escapeHtml(valueStr)}</span>`;
                 }).join(' ');
 
                 html += `
