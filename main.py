@@ -112,6 +112,11 @@ def main():
         default="json",
         help="Format of the _raw field (default: json)"
     )
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Output raw Splunk response without parsing (ignores --output-format and --raw-format)"
+    )
     
     # Transaction grouping
     parser.add_argument(
@@ -170,14 +175,40 @@ def main():
                 print(f"  - {idx}")
             sys.exit(0)
         
-        # Initialize scanner with raw format
-        scanner = LogScanner(client, raw_format=args.raw_format)
-        
         # Execute search
         print(f"Executing query: {args.query}", file=sys.stderr)
         if args.index:
             print(f"Index: {args.index}", file=sys.stderr)
         print(f"Time range: {args.earliest} to {args.latest}", file=sys.stderr)
+        
+        # If --raw flag is set, use client.search directly without parsing
+        if args.raw:
+            results = client.search(
+                query=args.query,
+                index=args.index,
+                earliest_time=args.earliest,
+                latest_time=args.latest,
+                max_results=args.max_results,
+            )
+            
+            print(f"Found {len(results)} events", file=sys.stderr)
+            
+            # Output raw JSON response
+            import json
+            output = json.dumps(results, indent=2)
+            
+            # Write output
+            if args.output_file:
+                with open(args.output_file, "w") as f:
+                    f.write(output)
+                print(f"Results written to {args.output_file}", file=sys.stderr)
+            else:
+                print(output)
+            
+            sys.exit(0)
+        
+        # Initialize scanner with raw format for normal processing
+        scanner = LogScanner(client, raw_format=args.raw_format)
         
         results = scanner.scan(
             query=args.query,
