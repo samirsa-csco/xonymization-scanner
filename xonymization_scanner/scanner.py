@@ -13,7 +13,7 @@ from .raw_parsers import RawParserRegistry
 class LogScanner:
     """High-level interface for scanning and analyzing Splunk logs."""
 
-    def __init__(self, client: SplunkClient, parser: Optional[LogParser] = None, raw_format: str = "json"):
+    def __init__(self, client: SplunkClient, parser: Optional[LogParser] = None, raw_format: str = "json", config_path: Optional[str] = None):
         """
         Initialize the log scanner.
 
@@ -21,10 +21,11 @@ class LogScanner:
             client: Configured SplunkClient instance
             parser: LogParser instance (creates new one if not provided)
             raw_format: Format of _raw field (json, plaintext, keyvalue)
+            config_path: Path to config file for index-specific parsing
         """
         self.client = client
         self.parser = parser or LogParser()
-        self.raw_parser_registry = RawParserRegistry()
+        self.raw_parser_registry = RawParserRegistry(config_path)
         self.raw_format = raw_format
         self.results: List[Any] = []
         self.raw_results: List[Dict[str, Any]] = []  # Store original Splunk results
@@ -61,18 +62,19 @@ class LogScanner:
         )
         
         if parse_raw:
-            self.results = self._parse_raw_fields(self.raw_results)
+            self.results = self._parse_raw_fields(self.raw_results, index)
         else:
             self.results = self.raw_results
         
         return self.results
     
-    def _parse_raw_fields(self, events: List[Dict[str, Any]]) -> List[Any]:
+    def _parse_raw_fields(self, events: List[Dict[str, Any]], index: Optional[str] = None) -> List[Any]:
         """
         Parse _raw fields from events and return only the parsed content.
         
         Args:
             events: List of Splunk events
+            index: Index name for index-specific parsing rules
             
         Returns:
             List of parsed _raw content
@@ -80,7 +82,7 @@ class LogScanner:
         parsed_results = []
         for event in events:
             if "_raw" in event:
-                parsed_raw = self.raw_parser_registry.parse(event["_raw"], self.raw_format)
+                parsed_raw = self.raw_parser_registry.parse(event["_raw"], self.raw_format, index)
                 if parsed_raw is not None:
                     parsed_results.append(parsed_raw)
                 else:
