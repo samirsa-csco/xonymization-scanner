@@ -76,7 +76,7 @@ def search():
         index = data.get('index')
         query = data.get('query')
         group_by_enabled = data.get('group_by_enabled', False)
-        group_by_field = data.get('group_by_field', 'serviceChainId')
+        group_by_field = data.get('group_by_field', 'serviceChainID')
         earliest = data.get('earliest', '-15m')
         latest = data.get('latest', 'now')
         max_results = data.get('max_results', 1000)
