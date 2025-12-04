@@ -1,0 +1,39 @@
+# Index-specific configuration for parsing and formatting
+# Each index can specify:
+# - field_path: Path to extract data from _raw (null for root, dot notation for nested)
+# - log_format: How to display the data (json or raw)
+# - is_regex: Set to true to treat the index name as a regex pattern (default: false)
+
+indexes:
+  # Example: Index where JSON is directly in _raw
+  # exact-index-name:
+  #   field_path: null  # Extract from root of _raw
+  #   log_format: json  # Display as formatted JSON
+  #   is_regex: false   # Exact match (default)
+  
+  # Example: Regex pattern matching multiple indexes
+  # "^app-.*-prod$":
+  #   field_path: "data.log"
+  #   log_format: json
+  #   is_regex: true    # Treat as regex pattern
+  
+  # Example: Index where JSON is in a nested field
+  # nested_logs_index:
+  #   field_path: "data.payload.log"  # Extract from nested field
+  #   log_format: json
+  
+  # Example: Index with raw text logs
+  # syslog_index:
+  #   field_path: "message"
+  #   log_format: raw  # Display as plain text line
+  
+  # Add your index configurations here:
+  "^zproxy-zproxy-.*-index$":
+    field_path: null
+    log_format: json
+    is_regex: true
+  
+  "^deepfactor-hztna-.*$":
+    field_path: "line"
+    log_format: json
+    is_regex: true

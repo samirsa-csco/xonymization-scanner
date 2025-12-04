@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Splunk Log Scanner - Transaction Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .search-panel {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .search-row {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #495057;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 12px 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        /* Style for datalist dropdown */
+        input[list]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            opacity: 0.6;
+        }
+
+        input[list]::-webkit-calendar-picker-indicator:hover {
+            opacity: 1;
+        }
+
+        .query-builder-icon {
+            cursor: pointer;
+            font-size: 1.2em;
+            opacity: 0.7;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .query-builder-icon:hover {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        .btn {
+            padding: 12px 32px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .content-area {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            min-height: 600px;
+        }
+
+        .content-area.no-grouping {
+            grid-template-columns: 1fr;
+        }
+
+        .content-area.no-grouping .transactions-list {
+            display: none;
+        }
+
+        .transactions-list {
+            background: #f8f9fa;
+            border-right: 2px solid #e9ecef;
+            overflow-y: auto;
+            max-height: calc(100vh - 400px);
+        }
+
+        .transaction-item {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .transaction-item:hover {
+            background: #e9ecef;
+        }
+
+        .transaction-item.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .transaction-id {
+            font-weight: 600;
+            font-size: 1em;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+
+        .transaction-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85em;
+            opacity: 0.8;
+        }
+
+        .transaction-stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .transaction-stat-icon {
+            font-size: 1.1em;
+        }
+
+        .details-panel {
+            padding: 30px;
+            overflow-y: auto;
+            max-height: calc(100vh - 400px);
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #6c757d;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        th {
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.85em;
+        }
+
+        td {
+            padding: 16px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .field-name {
+            font-weight: 600;
+            color: #495057;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .field-name:hover {
+            color: #667eea;
+            text-decoration: underline;
+        }
+
+        .field-values {
+            color: #6c757d;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 20px 30px;
+            border-left: 4px solid #f5c6cb;
+        }
+
+        .value-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #e9ecef;
+            border-radius: 12px;
+            margin: 2px;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .value-badge.single-value {
+            background: #d4edda;
+            color: #155724;
+            cursor: pointer;
+        }
+
+        .value-badge.single-value:hover {
+            background: #28a745;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        .value-badge.clickable {
+            background: #d4edda;
+            color: #155724;
+            cursor: pointer;
+            box-shadow: 
+                3px 3px 0 0 #a8d5a8,
+                6px 6px 0 0 #8bc98b;
+        }
+
+        .value-badge.clickable:hover {
+            background: #28a745;
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 
+                3px 3px 0 0 #1e7e34,
+                6px 6px 0 0 #155724;
+        }
+
+        .value-badge.multi-value {
+            background: #d4edda;
+            color: #155724;
+            cursor: pointer;
+            box-shadow: 
+                3px 3px 0 0 #a8d5a8,
+                6px 6px 0 0 #8bc98b;
+        }
+
+        .value-badge.multi-value:hover {
+            background: #28a745;
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 
+                3px 3px 0 0 #1e7e34,
+                6px 6px 0 0 #155724;
+        }
+
+        .value-badge.pii-value {
+            background: #ffb3ba;
+            color: #8b0000;
+            cursor: pointer;
+        }
+
+        .value-badge.pii-value:hover {
+            background: #dc3545;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        .popup-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .popup-overlay.active {
+            display: flex;
+        }
+
+        #popupOverlay2 {
+            z-index: 1100;
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        .popup-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: popupSlide 0.3s ease-out;
+        }
+
+        @keyframes popupSlide {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .popup-header h3 {
+            color: #495057;
+            margin: 0;
+        }
+
+        .popup-close {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #6c757d;
+            transition: color 0.2s;
+        }
+
+        .popup-close:hover {
+            color: #000;
+        }
+
+        .popup-value {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+        }
+
+        .shared-fields-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .shared-field-item {
+            padding: 12px;
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            transition: all 0.2s;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .shared-field-item:hover {
+            background: #667eea;
+            color: white;
+            transform: translateX(5px);
+        }
+
+        .log-message {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .log-message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .log-number {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .json-content {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .json-key {
+            color: #e06c75;
+        }
+
+        .json-string {
+            color: #98c379;
+        }
+
+        .json-number {
+            color: #d19a66;
+        }
+
+        .json-boolean {
+            color: #56b6c2;
+        }
+
+        .json-null {
+            color: #c678dd;
+        }
+
+        .popup-content.large {
+            max-width: 900px;
+            width: 90vw;
+        }
+
+        .query-builder-content {
+            padding: 20px;
+        }
+
+        .query-builder-section {
+            margin-bottom: 20px;
+        }
+
+        .query-builder-section h3 {
+            margin-bottom: 10px;
+            color: #495057;
+            font-size: 1.1em;
+        }
+
+        .query-builder-info {
+            background: #e7f3ff;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .sourcetype-search {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 1em;
+            margin-bottom: 15px;
+        }
+
+        .sourcetype-search:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .sourcetype-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            background: white;
+        }
+
+        .sourcetype-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e9ecef;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Courier New', monospace;
+        }
+
+        .sourcetype-item:last-child {
+            border-bottom: none;
+        }
+
+        .sourcetype-item:hover {
+            background: #e7f3ff;
+            padding-left: 20px;
+        }
+
+        .sourcetype-loading {
+            padding: 40px;
+            text-align: center;
+            color: #6c757d;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Splunk Transaction Viewer</h1>
+            <p>Group and analyze logs by transaction ID</p>
+        </div>
+
+        <div class="search-panel">
+            <div class="search-row">
+                <div class="form-group">
+                    <label for="index">Index</label>
+                    <input type="text" id="index" list="indexList" placeholder="e.g., main" value="" autocomplete="off">
+                    <datalist id="indexList"></datalist>
+                </div>
+                <div class="form-group">
+                    <label for="query" style="display: flex; align-items: center; gap: 8px;">
+                        <span>Splunk Query (SPL)</span>
+                        <span class="query-builder-icon" onclick="openQueryBuilder()" title="Query Builder">🔧</span>
+                    </label>
+                    <input type="text" id="query" placeholder="e.g., sourcetype=&quot;oracle-server&quot; environment=&quot;dev&quot;" value="">
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="groupByEnabled" onchange="toggleGroupByField()" checked style="width: auto; height: 18px; cursor: pointer;">
+                        <span>Group By Field</span>
+                    </label>
+                    <input type="text" id="groupByField" placeholder="Field name" value="serviceChainID" style="margin-top: 8px;">
+                </div>
+            </div>
+            <div style="display: flex; gap: 20px; align-items: flex-end;">
+                <div class="form-group" style="flex: 1;">
+                    <label for="earliest">Time Range (Earliest)</label>
+                    <input type="text" id="earliest" placeholder="-15m" value="-15m">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label for="latest">Time Range (Latest)</label>
+                    <input type="text" id="latest" placeholder="now" value="now">
+                </div>
+                <button class="btn btn-primary" onclick="executeSearch()" id="searchBtn">
+                    Search
+                </button>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Searching and grouping transactions...</p>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <div class="content-area" id="contentArea" style="display: none;">
+            <div class="transactions-list" id="transactionsList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <h3>No Transactions</h3>
+                    <p>Execute a search to see transactions</p>
+                </div>
+            </div>
+            <div class="details-panel" id="detailsPanel">
+                <div class="empty-state">
+                    <div class="empty-state-icon">👈</div>
+                    <h3>Select a Transaction</h3>
+                    <p>Click on a transaction from the list to view details</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Popup for shared values (first level) -->
+    <div class="popup-overlay" id="popupOverlay1" onclick="closeTopPopup(event, 1)">
+        <div class="popup-content" id="popupContent1" onclick="event.stopPropagation()">
+            <div class="popup-header">
+                <h3 id="popupTitle1">Fields Sharing This Value</h3>
+                <button class="popup-close" onclick="closeTopPopup(null, 1)">&times;</button>
+            </div>
+            <div id="popupBody1"></div>
+        </div>
+    </div>
+
+    <!-- Popup for field logs (second level) -->
+    <div class="popup-overlay" id="popupOverlay2" onclick="closeTopPopup(event, 2)">
+        <div class="popup-content" id="popupContent2" onclick="event.stopPropagation()">
+            <div class="popup-header">
+                <h3 id="popupTitle2">Field Logs</h3>
+                <button class="popup-close" onclick="closeTopPopup(null, 2)">&times;</button>
+            </div>
+            <div id="popupBody2"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = null;
+        let selectedTransaction = null;
+        let popupStack = []; // Track which popups are open
+
+        let indexSearchTimeout = null;
+
+        // Load indexes with optional search filter
+        async function loadIndexes(searchTerm = '') {
+            try {
+                const url = searchTerm 
+                    ? `/api/indexes?search=${encodeURIComponent(searchTerm)}`
+                    : '/api/indexes';
+                    
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success && data.indexes) {
+                    const datalist = document.getElementById('indexList');
+                    datalist.innerHTML = data.indexes
+                        .map(index => `<option value="${index}">`)
+                        .join('');
+                }
+            } catch (error) {
+                console.error('Failed to load indexes:', error);
+            }
+        }
+
+        // Debounced search for indexes as user types
+        function onIndexInput(event) {
+            const searchTerm = event.target.value;
+            
+            // Clear previous timeout
+            if (indexSearchTimeout) {
+                clearTimeout(indexSearchTimeout);
+            }
+            
+            // Only search if user has typed at least 1 character
+            if (searchTerm.length >= 1) {
+                // Debounce: wait 300ms after user stops typing
+                indexSearchTimeout = setTimeout(() => {
+                    loadIndexes(searchTerm);
+                }, 300);
+            } else {
+                // Load all indexes if field is empty
+                loadIndexes();
+            }
+        }
+
+        // Load initial indexes when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            loadIndexes();
+            
+            // Add input listener for dynamic search
+            const indexInput = document.getElementById('index');
+            indexInput.addEventListener('input', onIndexInput);
+        });
+
+        function toggleGroupByField() {
+            const enabled = document.getElementById('groupByEnabled').checked;
+            const field = document.getElementById('groupByField');
+            field.disabled = !enabled;
+            if (!enabled) {
+                field.style.opacity = '0.5';
+            } else {
+                field.style.opacity = '1';
+            }
+        }
+
+        async function executeSearch() {
+            const index = document.getElementById('index').value;
+            const query = document.getElementById('query').value;
+            const groupByEnabled = document.getElementById('groupByEnabled').checked;
+            const groupByField = document.getElementById('groupByField').value;
+            const earliest = document.getElementById('earliest').value;
+            const latest = document.getElementById('latest').value;
+
+            if (!query) {
+                showError('Please enter a search query');
+                return;
+            }
+
+            // Show loading
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('contentArea').style.display = 'none';
+            document.getElementById('errorContainer').innerHTML = '';
+            document.getElementById('searchBtn').disabled = true;
+
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        index: index || null,
+                        query: query,
+                        group_by_enabled: groupByEnabled,
+                        group_by_field: groupByField,
+                        earliest: earliest,
+                        latest: latest
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error);
+                }
+
+                currentData = data;
+                displayResults(data);
+
+            } catch (error) {
+                showError('Error: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+                document.getElementById('searchBtn').disabled = false;
+            }
+        }
+
+        function displayResults(data) {
+            const contentArea = document.getElementById('contentArea');
+            contentArea.style.display = 'grid';
+            
+            // Toggle sidebar based on grouping
+            if (data.grouped) {
+                contentArea.classList.remove('no-grouping');
+            } else {
+                contentArea.classList.add('no-grouping');
+            }
+
+            // Display transactions list
+            const transactionsList = document.getElementById('transactionsList');
+            if (data.transactions.length === 0) {
+                transactionsList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔍</div>
+                        <h3>No Transactions Found</h3>
+                        <p>Try adjusting your search query or time range</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            data.transactions.forEach(transaction => {
+                const fieldCount = currentData.details[transaction.id].fields.length;
+                html += `
+                    <div class="transaction-item" onclick="selectTransaction('${transaction.id}', event)">
+                        <div class="transaction-id">${transaction.id}</div>
+                        <div class="transaction-stats">
+                            <div class="transaction-stat">
+                                <span class="transaction-stat-icon">📄</span>
+                                <span>${transaction.log_count} log${transaction.log_count > 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="transaction-stat">
+                                <span class="transaction-stat-icon">🔑</span>
+                                <span>${fieldCount} field${fieldCount > 1 ? 's' : ''}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            transactionsList.innerHTML = html;
+
+            // Auto-select first transaction (or the only group if not grouped)
+            if (data.transactions.length > 0) {
+                selectTransaction(data.transactions[0].id, null);
+            }
+        }
+
+        function selectTransaction(transactionId, event) {
+            selectedTransaction = transactionId;
+
+            // Update active state
+            document.querySelectorAll('.transaction-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            if (event) {
+                event.target.closest('.transaction-item').classList.add('active');
+            } else {
+                // For auto-select, find the first item
+                const firstItem = document.querySelector('.transaction-item');
+                if (firstItem) firstItem.classList.add('active');
+            }
+
+            // Display details
+            const details = currentData.details[transactionId];
+            const sharedValues = details.shared_values || {};
+            const detailsPanel = document.getElementById('detailsPanel');
+
+            let html = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40%;">Field Name</th>
+                                <th style="width: 50%;">Values</th>
+                                <th style="width: 10%;">Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            details.fields.forEach(field => {
+                const isMultiValue = field.unique_count > 1;
+                const fieldSharedValues = sharedValues[field.field] || {};
+                const fieldNameEscaped = field.field.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                
+                const valuesHtml = field.values.map(v => {
+                    // Handle new structure with value and pii fields
+                    const valueObj = typeof v === 'object' && v !== null ? v : { value: v, pii: 'none' };
+                    const valueStr = String(valueObj.value);
+                    const isPii = valueObj.pii === 'pii';
+                    const hasSharedFields = fieldSharedValues[valueStr] && fieldSharedValues[valueStr].length > 0;
+                    // Escape value for use in HTML attribute - handle all special characters
+                    const valueEscaped = valueStr
+                        .replace(/\\/g, '\\\\')
+                        .replace(/'/g, "\\'")
+                        .replace(/"/g, '\\"')
+                        .replace(/\n/g, '\\n')
+                        .replace(/\r/g, '\\r')
+                        .replace(/\t/g, '\\t');
+                    
+                    let badgeClass = '';
+                    let onclick = '';
+                    
+                    if (isPii) {
+                        // PII value: red, shows logs with this value
+                        badgeClass = 'pii-value';
+                        onclick = `onclick="showLogsWithValue('${fieldNameEscaped}', '${valueEscaped}', false)"`;
+                    } else if (hasSharedFields) {
+                        // Value shared with other fields: green, shows shared fields
+                        badgeClass = 'clickable';
+                        const sharedFieldsJson = JSON.stringify(fieldSharedValues[valueStr]).replace(/"/g, '&quot;');
+                        onclick = `onclick="showSharedFields('${fieldNameEscaped}', '${valueEscaped}', ${sharedFieldsJson})"`;
+                    } else if (isMultiValue) {
+                        // Multi-value, not shared: yellow, shows logs with this value
+                        badgeClass = 'multi-value';
+                        onclick = `onclick="showLogsWithValue('${fieldNameEscaped}', '${valueEscaped}', false)"`;
+                    } else {
+                        // Single value, no shared fields: gray, shows logs with this value
+                        badgeClass = 'single-value';
+                        onclick = `onclick="showLogsWithValue('${fieldNameEscaped}', '${valueEscaped}', false)"`;
+                    }
+                    
+                    return `<span class="value-badge ${badgeClass}" ${onclick}>${escapeHtml(valueStr)}</span>`;
+                }).join(' ');
+
+                html += `
+                    <tr>
+                        <td class="field-name" onclick="showFieldLogs('${fieldNameEscaped}')">${escapeHtml(field.field)}</td>
+                        <td class="field-values">${valuesHtml}</td>
+                        <td style="text-align: center;">${field.unique_count}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            detailsPanel.innerHTML = html;
+        }
+
+        function showSharedFields(fieldName, value, sharedFields) {
+            const popupContent = document.getElementById('popupContent1');
+            popupContent.classList.remove('large');
+            
+            document.getElementById('popupTitle1').textContent = 'Fields Sharing This Value';
+            document.getElementById('popupBody1').innerHTML = `
+                <div class="popup-value">
+                    <strong>Value:</strong> ${escapeHtml(value)}<br>
+                    <strong>From Field:</strong> ${escapeHtml(fieldName)}
+                </div>
+                <p style="margin: 15px 0; color: #6c757d; font-size: 0.9em;">
+                    💡 Click on any field below to see its log messages
+                </p>
+                <ul class="shared-fields-list">
+                    ${sharedFields.map(field => 
+                        `<li class="shared-field-item" onclick="showFieldLogs('${escapeHtml(field)}', true)">${escapeHtml(field)}</li>`
+                    ).join('')}
+                </ul>
+            `;
+            
+            document.getElementById('popupOverlay1').classList.add('active');
+            popupStack = [1]; // Reset stack with first popup
+        }
+
+        function showLogsWithValue(fieldName, value, isSecondLevel = false) {
+            const details = currentData.details[selectedTransaction];
+            const logs = details.logs;
+            
+            // Find all logs where this field has this specific value
+            const logsWithValue = [];
+            logs.forEach((log, index) => {
+                const flattened = flattenDict(log);
+                if (fieldName in flattened && String(flattened[fieldName]) === value) {
+                    logsWithValue.push({ index: index + 1, log: log });
+                }
+            });
+            
+            if (logsWithValue.length === 0) return;
+            
+            if (isSecondLevel) {
+                // Show in second popup (stacked on top)
+                const popupContent = document.getElementById('popupContent2');
+                popupContent.classList.add('large');
+                
+                document.getElementById('popupTitle2').textContent = `Logs Where ${fieldName} = ${value}`;
+                
+                let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithValue.length} log${logsWithValue.length > 1 ? 's' : ''}</p>`;
+                
+                logsWithValue.forEach(item => {
+                    bodyHtml += `
+                        <div class="log-message">
+                            <div class="log-message-header">
+                                <span class="log-number">Log #${item.index}</span>
+                            </div>
+                            <div class="json-content">${syntaxHighlightJson(item.log)}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('popupBody2').innerHTML = bodyHtml;
+                document.getElementById('popupOverlay2').classList.add('active');
+                popupStack.push(2);
+            } else {
+                // Show in first popup (direct click from table)
+                const popupContent = document.getElementById('popupContent1');
+                popupContent.classList.add('large');
+                
+                document.getElementById('popupTitle1').textContent = `Logs Where ${fieldName} = ${value}`;
+                
+                let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithValue.length} log${logsWithValue.length > 1 ? 's' : ''}</p>`;
+                
+                logsWithValue.forEach(item => {
+                    bodyHtml += `
+                        <div class="log-message">
+                            <div class="log-message-header">
+                                <span class="log-number">Log #${item.index}</span>
+                            </div>
+                            <div class="json-content">${syntaxHighlightJson(item.log)}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('popupBody1').innerHTML = bodyHtml;
+                document.getElementById('popupOverlay1').classList.add('active');
+                popupStack = [1];
+            }
+        }
+
+        function showFieldLogs(fieldName, isSecondLevel = false) {
+            const details = currentData.details[selectedTransaction];
+            const logs = details.logs;
+            
+            // Find all logs that contain this field
+            const logsWithField = [];
+            logs.forEach((log, index) => {
+                // Check if field exists in flattened log
+                const flattened = flattenDict(log);
+                if (fieldName in flattened) {
+                    logsWithField.push({ index: index + 1, log: log });
+                }
+            });
+            
+            if (isSecondLevel) {
+                // Show in second popup (stacked on top)
+                const popupContent = document.getElementById('popupContent2');
+                popupContent.classList.add('large');
+                
+                document.getElementById('popupTitle2').textContent = `Logs Containing Field: ${fieldName}`;
+                
+                let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithField.length} log${logsWithField.length > 1 ? 's' : ''}</p>`;
+                
+                logsWithField.forEach(item => {
+                    bodyHtml += `
+                        <div class="log-message">
+                            <div class="log-message-header">
+                                <span class="log-number">Log #${item.index}</span>
+                            </div>
+                            <div class="json-content">${syntaxHighlightJson(item.log)}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('popupBody2').innerHTML = bodyHtml;
+                document.getElementById('popupOverlay2').classList.add('active');
+                popupStack.push(2);
+            } else {
+                // Show in first popup (direct click from table)
+                const popupContent = document.getElementById('popupContent1');
+                popupContent.classList.add('large');
+                
+                document.getElementById('popupTitle1').textContent = `Logs Containing Field: ${fieldName}`;
+                
+                let bodyHtml = `<p style="margin-bottom: 20px; color: #6c757d;">Found in ${logsWithField.length} log${logsWithField.length > 1 ? 's' : ''}</p>`;
+                
+                logsWithField.forEach(item => {
+                    bodyHtml += `
+                        <div class="log-message">
+                            <div class="log-message-header">
+                                <span class="log-number">Log #${item.index}</span>
+                            </div>
+                            <div class="json-content">${syntaxHighlightJson(item.log)}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('popupBody1').innerHTML = bodyHtml;
+                document.getElementById('popupOverlay1').classList.add('active');
+                popupStack = [1];
+            }
+        }
+
+        function flattenDict(obj, parent = '', sep = '.') {
+            let items = {};
+            for (let k in obj) {
+                let newKey = parent ? `${parent}${sep}${k}` : k;
+                if (obj[k] !== null && typeof obj[k] === 'object' && !Array.isArray(obj[k])) {
+                    Object.assign(items, flattenDict(obj[k], newKey, sep));
+                } else if (Array.isArray(obj[k])) {
+                    obj[k].forEach((item, i) => {
+                        if (typeof item === 'object' && item !== null) {
+                            Object.assign(items, flattenDict(item, `${newKey}[${i}]`, sep));
+                        } else {
+                            items[`${newKey}[${i}]`] = item;
+                        }
+                    });
+                } else {
+                    items[newKey] = obj[k];
+                }
+            }
+            return items;
+        }
+
+        function syntaxHighlightJson(json) {
+            if (typeof json !== 'string') {
+                json = JSON.stringify(json, null, 2);
+            }
+            
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function closeTopPopup(event, level) {
+            // Only close if clicking overlay (not content) or explicit close
+            if (event && event.target.id !== `popupOverlay${level}`) {
+                return;
+            }
+            
+            // Close the topmost popup in the stack
+            if (popupStack.length > 0) {
+                const topPopup = popupStack[popupStack.length - 1];
+                document.getElementById(`popupOverlay${topPopup}`).classList.remove('active');
+                document.getElementById(`popupContent${topPopup}`).classList.remove('large');
+                popupStack.pop();
+            }
+        }
+
+        function closeAllPopups() {
+            // Close all popups
+            while (popupStack.length > 0) {
+                closeTopPopup(null, popupStack[popupStack.length - 1]);
+            }
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.innerHTML = `
+                <div class="error-message">
+                    <strong>Error:</strong> ${escapeHtml(message)}
+                </div>
+            `;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Query Builder Functions
+        let sourcetypeSearchTimeout = null;
+
+        async function openQueryBuilder() {
+            const index = document.getElementById('index').value;
+            
+            if (!index) {
+                showError('Please select an index first');
+                return;
+            }
+
+            // Reset sourcetypes cache for fresh data
+            allSourcetypes = [];
+
+            // Show popup with loading state
+            const popupContent = document.getElementById('popupContent1');
+            popupContent.classList.remove('large');
+            
+            document.getElementById('popupTitle1').textContent = 'Query Builder';
+            document.getElementById('popupBody1').innerHTML = `
+                <div class="query-builder-content">
+                    <div class="query-builder-section">
+                        <div class="query-builder-info">
+                            <strong>Selected Index:</strong> ${escapeHtml(index)}
+                        </div>
+                    </div>
+                    <div class="query-builder-section">
+                        <h3>Select Sourcetype</h3>
+                        <input type="text" 
+                               class="sourcetype-search" 
+                               id="sourcetypeSearch" 
+                               placeholder="Filter sourcetypes..." 
+                               oninput="onSourcetypeSearch(event)">
+                        <div class="sourcetype-list" id="sourcetypeList">
+                            <div class="sourcetype-loading">
+                                <div style="display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                                <p style="margin-top: 10px;">Loading sourcetypes...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('popupOverlay1').classList.add('active');
+            popupStack = [1];
+
+            // Load sourcetypes for the selected index
+            await loadSourcetypes(index);
+        }
+
+        let allSourcetypes = []; // Store all sourcetypes for client-side filtering
+
+        async function loadSourcetypes(index, searchTerm = '') {
+            try {
+                const listContainer = document.getElementById('sourcetypeList');
+                
+                // If no search term and we haven't loaded yet, fetch from server
+                if (!searchTerm && allSourcetypes.length === 0) {
+                    const url = `/api/sourcetypes?index=${encodeURIComponent(index)}`;
+                    console.log('Fetching sourcetypes from:', url);
+                    
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    console.log('Sourcetypes response:', data);
+                    
+                    if (data.success && data.sourcetypes) {
+                        allSourcetypes = data.sourcetypes;
+                        console.log(`Loaded ${allSourcetypes.length} sourcetypes`);
+                    } else {
+                        const errorMsg = data.error || 'Unknown error';
+                        listContainer.innerHTML = `<div class="sourcetype-loading">Error: ${escapeHtml(errorMsg)}</div>`;
+                        return;
+                    }
+                }
+                
+                // Filter sourcetypes client-side
+                let filteredSourcetypes = allSourcetypes;
+                if (searchTerm) {
+                    const searchLower = searchTerm.toLowerCase();
+                    filteredSourcetypes = allSourcetypes.filter(st => st.toLowerCase().includes(searchLower));
+                }
+                
+                // Display results
+                if (filteredSourcetypes.length > 0) {
+                    listContainer.innerHTML = filteredSourcetypes
+                        .map(st => {
+                            const escaped = st.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                            return `<div class="sourcetype-item" onclick="selectSourcetype('${escaped}')">${escapeHtml(st)}</div>`;
+                        })
+                        .join('');
+                } else {
+                    listContainer.innerHTML = '<div class="sourcetype-loading">No sourcetypes found</div>';
+                }
+            } catch (error) {
+                console.error('Failed to load sourcetypes:', error);
+                const listContainer = document.getElementById('sourcetypeList');
+                if (listContainer) {
+                    listContainer.innerHTML = `<div class="sourcetype-loading">Error: ${escapeHtml(error.message)}</div>`;
+                }
+            }
+        }
+
+        function onSourcetypeSearch(event) {
+            const searchTerm = event.target.value;
+            
+            // Instant client-side filtering (no debounce needed)
+            const searchLower = searchTerm.toLowerCase();
+            const filteredSourcetypes = searchTerm 
+                ? allSourcetypes.filter(st => st.toLowerCase().includes(searchLower))
+                : allSourcetypes;
+            
+            const listContainer = document.getElementById('sourcetypeList');
+            if (filteredSourcetypes.length > 0) {
+                listContainer.innerHTML = filteredSourcetypes
+                    .map(st => {
+                        const escaped = st.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        return `<div class="sourcetype-item" onclick="selectSourcetype('${escaped}')">${escapeHtml(st)}</div>`;
+                    })
+                    .join('');
+            } else {
+                listContainer.innerHTML = '<div class="sourcetype-loading">No sourcetypes match your filter</div>';
+            }
+        }
+
+        function selectSourcetype(sourcetype) {
+            // Set the query field with the selected sourcetype
+            document.getElementById('query').value = `sourcetype="${sourcetype}"`;
+            
+            // Close the popup
+            closeTopPopup(null, 1);
+        }
+
+        // Allow Enter key to trigger search and ESC to close popup
+        document.addEventListener('DOMContentLoaded', function() {
+            ['index', 'query', 'groupByField', 'earliest', 'latest'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            executeSearch();
+                        }
+                    });
+                }
+            });
+        });
+        
+        // ESC key closes top popup (global handler, not inside DOMContentLoaded)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && popupStack.length > 0) {
+                closeTopPopup(null, popupStack[popupStack.length - 1]);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 import requests
 from requests.auth import HTTPBasicAuth
+import urllib3
 
 
 class SplunkClient:
@@ -39,6 +40,10 @@ class SplunkClient:
         # Use HTTPS with management port for Splunk Cloud API
         self.base_url = f"https://{host}:{port}"
         self.session = requests.Session()
+        
+        # Disable SSL warnings if SSL verification is disabled
+        if not verify_ssl:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
         if token:
             self.session.headers.update({"Authorization": f"Bearer {token}"})
@@ -158,19 +163,27 @@ class SplunkClient:
         
         return results
 
-    def get_indexes(self) -> List[str]:
+    def get_indexes(self, search_term: str = None) -> List[str]:
         """
-        Get list of available Splunk indexes.
+        Get list of available Splunk indexes, optionally filtered by search term.
+
+        Args:
+            search_term: Optional search term to filter indexes (e.g., "ora" to find indexes containing "ora")
 
         Returns:
             List of index names
         """
         url = f"{self.base_url}/services/data/indexes"
+        params = {"output_mode": "json"}
+        
+        # Add search filter if provided
+        if search_term:
+            params["search"] = f"name=*{search_term}*"
         
         try:
             response = self.session.get(
                 url,
-                params={"output_mode": "json"},
+                params=params,
                 verify=self.verify_ssl,
             )
             response.raise_for_status()
@@ -186,6 +199,51 @@ class SplunkClient:
 
         except requests.exceptions.RequestException as e:
             raise ConnectionError(f"Failed to get indexes: {e}")
+
+    def get_sourcetypes(self, index: str = None, search_term: str = None) -> List[str]:
+        """
+        Get list of available sourcetypes for a specific index.
+
+        Args:
+            index: Required index to get sourcetypes from
+            search_term: Optional search term to filter sourcetypes
+
+        Returns:
+            List of sourcetype names
+            
+        Raises:
+            ValueError: If index is not provided
+        """
+        if not index:
+            raise ValueError("Index is required to get sourcetypes")
+        
+        # Use a simple search query to get sourcetypes from actual data
+        search_query = f"index={index} | stats count by sourcetype | fields sourcetype"
+        
+        try:
+            # Execute the search with a reasonable time range
+            results = self.search(
+                search_query, 
+                earliest_time="-7d",  # Look back 7 days for recent data
+                latest_time="now",
+                max_results=1000
+            )
+            
+            sourcetypes = [
+                result.get("sourcetype")
+                for result in results
+                if result.get("sourcetype")
+            ]
+            
+            # Apply client-side filtering if search term provided
+            if search_term:
+                search_lower = search_term.lower()
+                sourcetypes = [st for st in sourcetypes if search_lower in st.lower()]
+            
+            return sorted(sourcetypes)
+
+        except Exception as e:
+            raise ConnectionError(f"Failed to get sourcetypes: {e}")
 
     def test_connection(self) -> bool:
         """

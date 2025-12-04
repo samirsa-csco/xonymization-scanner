@@ -9,6 +9,7 @@ from .raw_parsers import (
     PlainTextRawParser,
     KeyValueRawParser,
     RawParserRegistry,
+    IndexConfig,
 )
 
 __version__ = "0.1.0"
@@ -21,4 +22,5 @@ __all__ = [
     "PlainTextRawParser",
     "KeyValueRawParser",
     "RawParserRegistry",
+    "IndexConfig",
 ]
